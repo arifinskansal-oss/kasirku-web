@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D9488">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KasirKu">
+<meta name="description" content="KasirKu — aplikasi kasir toko offline. Scan merek, isi jumlah, total terhitung otomatis. Data tersimpan di perangkat.">
+<title>KasirKu — Kasir Toko Offline</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --hijau: #0D9488; --hijau-tua: #0F766E; --hijau-muda: #CCFBF1; --amber: #F59E0B; --merah: #DC2626; --teks: #1F2937; --abu: #6B7280; --garis: #E5E7EB; --latar: #F3F4F6; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--latar); color: var(--teks); padding-bottom: 76px; }
+  header { background: linear-gradient(135deg, #10B981, var(--hijau)); color: #fff; padding: 14px 16px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  header .logo { width: 44px; height: 44px; flex: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  header h1 { font-size: 20px; line-height: 1.1; }
+  header p { font-size: 12px; opacity: .9; }
+  main { padding: 12px; max-width: 640px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.aktif { display: block; }
+  h2 { font-size: 17px; margin: 6px 2px 10px; }
+  input, select { width: 100%; padding: 11px 12px; font-size: 16px; border: 1px solid var(--garis); border-radius: 10px; background: #fff; }
+  input:focus { outline: 2px solid var(--hijau); border-color: transparent; }
+  label { display: block; font-size: 13px; color: var(--abu); margin: 10px 2px 4px; }
+  .kartu { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .produk-item { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--garis); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+  .produk-item:active { background: var(--hijau-muda); }
+  .produk-item.habis { opacity: .55; }
+  .pi-nama { display: block; font-weight: 700; font-size: 15px; }
+  .pi-harga { display: block; color: var(--hijau-tua); font-weight: 700; margin-top: 2px; }
+  .pi-stok { display: block; font-size: 12px; color: var(--abu); margin-top: 2px; }
+  .pi-stok.menipis { color: var(--merah); font-weight: 700; }
+  .kosong { color: var(--abu); text-align: center; padding: 18px 8px; font-size: 14px; }
+  .cart-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--garis); }
+  .cart-item:last-child { border-bottom: none; }
+  .ci-info b { display: block; font-size: 14px; }
+  .ci-info span { font-size: 13px; color: var(--abu); }
+  .ci-aksi { display: flex; align-items: center; gap: 6px; flex: none; }
+  .ci-aksi button { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--garis); background: #fff; font-size: 17px; cursor: pointer; }
+  .ci-aksi button.hapus { color: var(--merah); }
+  .ci-aksi span { min-width: 20px; text-align: center; font-weight: 700; }
+  /* v1.6 — jumlah ketik di keranjang */
+  .ci-aksi input.ci-qty { width: 56px; flex: none; text-align: center; padding: 6px 4px; font-size: 15px; font-weight: 700; }
+  .ringkas { display: flex; justify-content: space-between; padding: 7px 2px; font-size: 15px; }
+  .ringkas.total { font-size: 18px; font-weight: 800; border-top: 2px solid var(--garis); margin-top: 6px; padding-top: 10px; }
+  .ringkas .negatif { color: var(--merah); font-weight: 700; }
+  .btn { display: block; width: 100%; padding: 13px; font-size: 16px; font-weight: 700; border: none; border-radius: 12px; cursor: pointer; margin-top: 10px; }
+  .btn-utama { background: var(--hijau); color: #fff; }
+  .btn-utama:disabled { background: #9CA3AF; cursor: not-allowed; }
+  .btn-garis { background: #fff; color: var(--teks); border: 1px solid var(--garis); }
+  .btn-scan-besar { padding: 16px; font-size: 19px; margin-top: 0; }
+  .total-besar { background: linear-gradient(135deg, #10B981, var(--hijau)); color: #fff; border-radius: 12px; padding: 12px 14px; font-size: 22px; font-weight: 800; text-align: center; margin-top: 10px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  .form-grid .lebar { grid-column: 1 / -1; }
+  details.lanjutan { margin-top: 12px; border: 1px dashed var(--garis); border-radius: 10px; padding: 8px 10px; }
+  details.lanjutan summary { font-size: 14px; font-weight: 700; color: var(--hijau-tua); cursor: pointer; }
+  .produk-kartu { display: flex; justify-content: space-between; gap: 10px; background: #fff; border: 1px solid var(--garis); border-radius: 12px; padding: 11px 12px; margin-bottom: 8px; }
+  .pk-info b { display: block; font-size: 15px; }
+  .pk-info span { display: block; font-size: 13px; color: var(--abu); margin-top: 2px; }
+  .pk-stok.menipis { color: var(--merah); font-weight: 700; }
+  .pk-aksi { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  .pk-aksi button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--garis); background: #fff; font-size: 13px; cursor: pointer; }
+  .pk-aksi button.hapus { color: var(--merah); }
+  .trx { background: #fff; border: 1px solid var(--garis); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
+  .trx-head { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 11px 12px; background: #fff; border: none; text-align: left; font-size: 14px; cursor: pointer; }
+  .trx-detail { padding: 4px 12px 12px; font-size: 14px; color: var(--teks); border-top: 1px dashed var(--garis); }
+  .trx-detail div { padding: 3px 0; }
+  /* v1.4-test3 — tombol Cetak + WA tiap kartu riwayat */
+  .trx-aksi { display: flex; gap: 8px; margin-top: 8px; }
+  .trx-aksi .btn-trx { flex: 1; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--garis); background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .trx-aksi .btn-trx:active { background: var(--hijau-muda); }
+  .stat { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat .kartu { margin-bottom: 0; }
+  .stat .angka { font-size: 20px; font-weight: 800; color: var(--hijau-tua); margin-top: 4px; }
+  .stat .judul { font-size: 13px; color: var(--abu); }
+  nav { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--garis); display: flex; z-index: 10; }
+  nav button { flex: 1; padding: 10px 0 12px; background: none; border: none; font-size: 12px; color: var(--abu); cursor: pointer; }
+  nav button.aktif { color: var(--hijau); font-weight: 700; }
+  nav button .ikon { display: block; font-size: 20px; line-height: 1.2; }
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%) translateY(20px); background: #111827; color: #fff; padding: 10px 16px; border-radius: 24px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 20; max-width: 92%; text-align: center; }
+  #toast.tampil { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .catatan { font-size: 12px; color: var(--abu); text-align: center; margin-top: 14px; }
+  .baris-scan { display: flex; gap: 8px; }
+  .baris-scan input { flex: 1; }
+  .baris-scan button { flex: none; width: auto; padding: 11px 14px; margin-top: 0; font-size: 15px; }
+  #scan-modal { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.85); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #scan-reader { width: 100%; max-width: 420px; background: #000; border-radius: 12px; overflow: hidden; }
+  #scan-reader video { width: 100% !important; }
+  #scan-status { color: #fff; font-size: 14px; text-align: center; margin: 12px 0; }
+  #btn-flash, #btn-tutup-scan { width: 100%; max-width: 420px; }
+  /* v1.7.7 — tombol lampu flash sedang menyala */
+  #btn-flash.nyala { background: var(--hijau); color: #fff; border-color: var(--hijau); }
+  /* v1.7.8 — modal potong gambar persegi */
+  #crop-modal { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.85); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #crop-viewport { width: 300px; height: 300px; overflow: hidden; position: relative; background: #000; border-radius: 12px; touch-action: none; }
+  #crop-gambar { position: absolute; max-width: none; }
+  #crop-status { color: #fff; font-size: 14px; text-align: center; margin: 12px 0 8px; }
+  .crop-zoom { display: flex; gap: 10px; margin-bottom: 10px; }
+  .crop-zoom button { width: 64px; font-size: 20px; padding: 8px 0; }
+  #btn-crop-potong, #btn-crop-batal { width: 100%; max-width: 300px; }
+  /* v1.7.8 — QRIS layar penuh */
+  #qris-fullscreen { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #000; z-index: 60; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #qris-full-gambar { width: 92vw; max-width: 480px; border-radius: 12px; background: #fff; cursor: pointer; }
+  #qris-full-total { color: #fff; font-size: 34px; font-weight: 800; margin: 16px 0; }
+  #btn-qris-full-simpan, #btn-qris-full-tutup { width: 100%; max-width: 480px; }
+  #panel-jumlah { display: none; border: 2px solid var(--hijau); }
+  #panel-jumlah h2 { margin-top: 0; }
+  .jml-harga { font-size: 18px; font-weight: 800; color: var(--hijau-tua); margin: 2px 0 6px; }
+  .chip-baris { display: flex; gap: 8px; margin: 8px 0 4px; }
+  .chip { flex: 1; padding: 11px 4px; font-size: 15px; font-weight: 700; border-radius: 10px; border: 1px solid var(--hijau); background: var(--hijau-muda); color: var(--hijau-tua); cursor: pointer; }
+  .chip:active { background: var(--hijau); color: #fff; }
+  .chip-aktif { background: var(--hijau); color: #fff; }
+  #pilih-kategori .chip { flex: none; padding: 11px 16px; }
+  header .logo-img { width: 44px; height: 44px; flex: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  header .spacer { flex: 1; }
+  header .btn-gear { background: rgba(255,255,255,.2); color: #fff; border: none; border-radius: 10px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; flex: none; }
+  .grid-judul { font-size: 14px; color: var(--abu); margin: 14px 2px 8px; }
+  .grid-pilih { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--garis); border-radius: 12px; padding: 12px; cursor: pointer; min-height: 76px; }
+  .tile:active { background: var(--hijau-muda); }
+  .tile.habis { opacity: .55; }
+  .tile-nama { display: block; font-weight: 700; font-size: 15px; }
+  .tile-harga { display: block; color: var(--hijau-tua); font-weight: 700; margin-top: 4px; font-size: 14px; }
+  .tile-stok { display: block; font-size: 12px; color: var(--abu); margin-top: 2px; }
+  .chip-barcode { display: inline-block; background: var(--hijau-muda); color: var(--hijau-tua); font-weight: 700; font-size: 14px; border-radius: 16px; padding: 6px 6px 6px 12px; margin: 4px 4px 0 0; }
+  .chip-barcode button { background: none; border: none; color: var(--merah); font-size: 16px; font-weight: 700; cursor: pointer; padding: 0 6px; }
+  .struk-teks { white-space: pre-wrap; font-family: monospace; font-size: 14px; background: #F9FAFB; border: 1px solid var(--garis); border-radius: 10px; padding: 12px; margin: 8px 0; }
+  .pengaturan-opsi label { display: flex; align-items: center; gap: 10px; font-size: 16px; color: var(--teks); margin: 0; padding: 12px 4px; border-bottom: 1px solid var(--garis); cursor: pointer; }
+  .pengaturan-opsi input { width: auto; accent-color: var(--hijau); }
+  /* v1.4 — banner trial + layar kunci */
+  /* v1.7.3 — spanduk trial adalah tombol (bisa diketuk ke kolom kode). */
+  #trial-banner { display: block; width: 100%; border: none; font: inherit; cursor: pointer; background: #FEF3C7; color: #92400E; font-size: 13px; text-align: center; padding: 8px 12px; }
+  #layar-kunci { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #F3F4F6; z-index: 60; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+  #layar-kunci .kunci-kartu { background: #fff; border-radius: 16px; padding: 22px 18px; max-width: 420px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,.12); }
+  #layar-kunci h2 { font-size: 20px; margin-bottom: 6px; }
+  #layar-kunci p { font-size: 14px; color: var(--abu); margin-bottom: 10px; }
+  #layar-kunci .kunci-pesan { color: var(--merah); font-weight: 700; min-height: 20px; }
+  .kunci-tombol { display: flex; gap: 8px; margin-top: 10px; }
+  .kunci-tombol a { flex: 1; display: block; padding: 12px; border-radius: 12px; font-size: 15px; font-weight: 700; text-decoration: none; text-align: center; }
+  .kunci-beli { background: var(--hijau); color: #fff; }
+  .kunci-email { background: #fff; color: var(--teks); border: 1px solid var(--garis); }
+  /* v1.4 — foto produk */
+  .tile-foto { width: 100%; height: 72px; object-fit: cover; border-radius: 8px; margin-bottom: 6px; display: block; }
+  .ci-foto { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; flex: none; }
+  .pk-foto { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; flex: none; }
+  .produk-kartu { align-items: flex-start; }
+  /* v1.5 — tile stok menipis (merah) + spinner loading printer + baris rekap */
+  .tile.menipis { border: 2px solid var(--merah); }
+  .tile.menipis .tile-stok { color: var(--merah); font-weight: 700; }
+  .spinner { width: 22px; height: 22px; border: 3px solid var(--garis); border-top-color: var(--hijau); border-radius: 50%; animation: putar .8s linear infinite; flex: none; }
+  @keyframes putar { to { transform: rotate(360deg); } }
+  #printer-loading { display: none; align-items: center; gap: 10px; font-size: 14px; color: var(--abu); margin: 8px 0; }
+  .baris-rekap { display: flex; justify-content: space-between; gap: 8px; padding: 8px 2px; border-bottom: 1px solid var(--garis); font-size: 14px; }
+  .baris-rekap:last-child { border-bottom: none; }
+  .baris-rekap b { text-align: right; }
+  .kasbon-total { font-size: 16px; font-weight: 800; color: var(--hijau-tua); }
+  /* v1.5 — layar sambutan (tombol besar, kata-kata biasa) */
+  #layar-sambutan { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #F3F4F6; z-index: 60; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+  #layar-sambutan .kunci-kartu { background: #fff; border-radius: 16px; padding: 22px 18px; max-width: 420px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,.12); }
+  #layar-sambutan h2 { font-size: 20px; margin-bottom: 6px; }
+  #layar-sambutan p { font-size: 14px; color: var(--abu); margin-bottom: 10px; }
+  #layar-sambutan a { color: var(--hijau-tua); font-weight: 700; }
+  /* v1.4 — modal cetak barcode */
+  #cetak-modal { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 55; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #cetak-modal .kunci-kartu { background: #fff; border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; }
+  /* v1.4-test2 — dialog konfirmasi keluar (pola SAMRIDE): hanya pertanyaan
+     + Ya/Tidak, tanpa URL dan tanpa teks lain */
+  #dlg-latar { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 70; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #dlg-latar .kunci-kartu { background: #fff; border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; text-align: center; }
+  #dlg-teks { font-size: 17px; font-weight: 700; margin: 4px 0 16px; }
+  /* v1.7 — modal hapus transaksi + pengingat cadangan (pola sama seperti #dlg-latar) */
+  /* v1.7.4 — dialog pemberitahuan update (pola yang sama) */
+  #hapus-latar, #cadangan-latar, #update-latar, #cetak-pilih-latar { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 70; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #hapus-latar .kunci-kartu, #cadangan-latar .kunci-kartu, #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu { background: #fff; border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; text-align: center; }
+  #hapus-teks, #cadangan-teks, #update-teks { font-size: 17px; font-weight: 700; margin: 4px 0 8px; }
+  .hapus-sub { font-size: 14px; color: var(--abu); margin: 0 0 16px; }
+  .btn-bahaya { background: var(--merah); color: #fff; }
+  #btn-riwayat-lebih { width: 100%; margin: 4px 0 12px; }
+  .dlg-tombol { display: flex; gap: 8px; }
+  .dlg-tombol .btn { flex: 1; }
+  #area-cetak { display: none; }
+  /* v1.7.6 — TATA LETAK TABLET OTOMATIS (lebar layar >= 768px).
+     Di HP layar kecil TIDAK ADA perubahan: aturan dasar di atas tetap
+     berlaku apa adanya. Di tablet: konten melebar (main 960px), grid
+     Pilih Produk 3 kolom, tab Kasir 2 kolom (kiri keranjang + subtotal
+     + total, kanan diskon/bayar/kembalian/tombol), dialog/modal melebar
+     (560px). Urutan DOM TIDAK diubah — penempatan kolom murni lewat
+     grid-column; logika JS (termasuk gulir #btn-simpan saat fokus
+     #bayar/#diskon, v1.6) tidak berubah. */
+  @media screen and (min-width: 768px) {
+    main { max-width: 960px; }
+    .grid-pilih { grid-template-columns: 1fr 1fr 1fr; }
+    #kartu-keranjang { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; align-items: start; }
+    #kartu-keranjang > h2, #kartu-keranjang > #keranjang,
+    #kartu-keranjang > .ringkas:nth-of-type(4),
+    #kartu-keranjang > .ringkas:nth-of-type(5) { grid-column: 1; }
+    #kartu-keranjang > #bayar-metode, #kartu-keranjang > #area-qris,
+    #kartu-keranjang > label, #kartu-keranjang > input,
+    #kartu-keranjang > .ringkas:nth-of-type(6),
+    #kartu-keranjang > #btn-simpan, #kartu-keranjang > #btn-bersihkan { grid-column: 2; }
+    #layar-kunci .kunci-kartu, #layar-sambutan .kunci-kartu,
+    #cetak-modal .kunci-kartu, #dlg-latar .kunci-kartu,
+    #hapus-latar .kunci-kartu, #cadangan-latar .kunci-kartu,
+    #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu { max-width: 560px; }
+    #scan-reader, #btn-flash, #btn-tutup-scan { max-width: 560px; }
+  }
+  @media print {
+    body * { visibility: hidden; }
+    #area-cetak, #area-cetak * { visibility: visible; }
+    #area-cetak { display: flex !important; flex-wrap: wrap; gap: 8px; position: absolute; left: 0; top: 0; width: 100%; padding: 8px; }
+    .label-barcode { width: 31%; border: 1px dashed #999; border-radius: 6px; padding: 8px 4px; text-align: center; page-break-inside: avoid; }
+    .label-nama { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
+    /* v1.7.4 — harga di tiap label (nama + harga + barcode + kode) */
+    .label-harga { font-size: 12px; font-weight: 700; margin-bottom: 2px; }
+    .label-svg { width: 100%; height: 56px; }
+    .label-kode { font-size: 11px; font-family: monospace; margin-top: 2px; }
+    /* v1.4-test3 — struk riwayat yang dicetak (teks sama seperti struk WA) */
+    .struk-cetak { width: 100%; font-family: monospace; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    /* v1.4 — daftar perangkat Bluetooth di Pengaturan > Printer */
+    .printer-item { display: block; width: 100%; text-align: left; background: #F9FAFB; border: 1px solid var(--garis); border-radius: 10px; padding: 10px 12px; margin: 6px 0; font-size: 14px; color: var(--teks); cursor: pointer; }
+    .printer-item span { font-size: 12px; color: var(--abu); font-family: monospace; }
+    #printer-daftar { margin: 8px 0; }
+    @page { size: A4; margin: 10mm; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <img class="logo-img" src="icon-192.png" alt="KasirKu">
+  <div><h1>KasirKu</h1><p>Hitung cepat, jualan tenang.</p></div>
+  <div class="spacer"></div>
+  <button id="btn-pengaturan" class="btn-gear" aria-label="Pengaturan">⚙️</button>
+</header>
+<button id="trial-banner" type="button" style="display:none"></button>
+
+<main>
+  <section id="tab-kasir" class="tab aktif">
+    <button id="btn-scan" class="btn btn-utama btn-scan-besar">📷 Scan Barcode</button>
+    <button id="btn-pilih-produk" class="btn btn-garis" style="font-size:17px">🛒 Pilih Produk (ketuk nama)</button>
+    <div class="total-besar" id="total-besar">Total: Rp0</div>
+    <div class="kartu" id="panel-sambung" style="display:none">
+      <h2 style="margin-top:0">Barcode baru: <span id="sambung-kode"></span></h2>
+      <p style="font-size:14px;color:var(--abu)">Barcode ini belum terdaftar. Sambungkan ke produk yang sudah ada, atau buat produk baru — jangan bikin duplikat.</p>
+      <div id="sambung-daftar" style="margin-top:10px"></div>
+      <button id="btn-sambung-baru" class="btn btn-utama">＋ Buat Produk Baru</button>
+      <button id="btn-sambung-batal" class="btn btn-garis">Batal</button>
+    </div>
+    <div class="kartu" id="panel-jumlah">
+      <h2 id="jml-nama">Produk</h2>
+      <div class="jml-harga" id="jml-harga">Rp0</div>
+      <label for="jml-input">Jumlah yang dibeli</label>
+      <input id="jml-input" type="number" min="0" step="any" inputmode="decimal" placeholder="Jumlah">
+      <div class="chip-baris" id="jml-cepat"></div>
+      <button id="btn-jml-masuk" class="btn btn-utama">Masukkan ke Keranjang</button>
+      <button id="btn-jml-batal" class="btn btn-garis">Batal</button>
+    </div>
+    <div class="kartu" id="panel-struk" style="display:none">
+      <h2 style="margin-top:0">Struk tersimpan ✅</h2>
+      <div class="struk-teks" id="struk-teks"></div>
+      <label for="wa-nomor">Nomor WA pelanggan (opsional — kosong = pilih kontak sendiri di WA)</label>
+      <input id="wa-nomor" type="tel" inputmode="tel" placeholder="cth: 082353013214">
+      <button id="btn-kirim-wa" class="btn btn-utama">💬 Kirim Struk via WA</button>
+      <button id="btn-cetak-struk" class="btn btn-garis">🖨️ Cetak Struk</button>
+      <button id="btn-tutup-struk" class="btn btn-garis">Tutup</button>
+    </div>
+    <div class="kartu" id="kartu-keranjang">
+      <h2 style="margin-top:0">Keranjang</h2>
+      <div id="keranjang"></div>
+      <!-- v1.7.7 — pilihan pembayaran per transaksi (kembali ke Tunai tiap transaksi baru) -->
+      <div class="chip-baris" id="bayar-metode">
+        <button type="button" class="chip chip-aktif" id="btn-metode-tunai">💵 Tunai</button>
+        <button type="button" class="chip" id="btn-metode-qris">📱 QRIS</button>
+      </div>
+      <div id="area-qris" style="display:none">
+        <img id="qris-gambar-kasir" src="" alt="Kode QRIS" style="width:100%;max-width:280px;border-radius:12px;display:block;margin:10px auto 4px">
+        <div class="ringkas total"><span>Total</span><b id="qris-total">Rp0</b></div>
+        <p style="font-size:13px;color:var(--abu);text-align:center">Pembeli scan kode ini, lalu ketik jumlahnya di aplikasi banknya.</p>
+      </div>
+      <label for="diskon">Diskon (Rp, opsional)</label>
+      <input id="diskon" type="text" inputmode="numeric" placeholder="0">
+      <label for="bayar" id="label-bayar">Uang diterima (Rp)</label>
+      <input id="bayar" type="text" inputmode="numeric" placeholder="0">
+      <div class="ringkas"><span>Subtotal</span><b id="subtotal">Rp0</b></div>
+      <div class="ringkas total"><span>Total</span><b id="total">Rp0</b></div>
+      <div class="ringkas" id="baris-kembalian"><span>Kembalian</span><b id="kembalian">Rp0</b></div>
+      <button id="btn-simpan" class="btn btn-utama" disabled>Simpan Transaksi</button>
+      <button id="btn-bersihkan" class="btn btn-garis">Bersihkan Keranjang</button>
+    </div>
+  </section>
+
+  <section id="tab-pilih" class="tab">
+    <h2>Pilih Produk — ketuk nama</h2>
+    <input id="cari-pilih" type="search" placeholder="Cari nama merek..." autocomplete="off">
+    <div class="chip-baris" id="pilih-kategori" style="flex-wrap:wrap"></div>
+    <div id="grid-pilih"></div>
+    <button id="btn-lihat-keranjang" class="btn btn-utama" style="position:sticky;bottom:76px">🛒 Lihat Keranjang</button>
+    <p class="catatan">Ketuk nama produk untuk memasukkan ke keranjang. Produk curah (Liter/mili/Kg/Gram) akan meminta jumlah dulu.</p>
+    <div style="height:56px"></div>
+  </section>
+
+  <section id="tab-produk" class="tab">
+    <h2>Produk &amp; Stok</h2>
+    <div class="kartu">
+      <h2 id="f-judul" style="margin-top:0">Tambah Produk</h2>
+      <label for="f-nama">Nama merek</label>
+      <input id="f-nama" type="text" placeholder="cth: Minyak Goreng Curah">
+      <div class="form-grid">
+        <div><label for="f-harga">Harga per satuan (Rp)</label><input id="f-harga" type="text" inputmode="numeric" placeholder="cth: 15000"></div>
+        <div><label for="f-satuan">Satuan</label>
+          <select id="f-satuan">
+            <option value="Pcs">Pcs (kemasan)</option>
+            <option value="Liter">Liter (curah)</option>
+            <option value="mili">mili (curah)</option>
+            <option value="Dus">Dus (kemasan)</option>
+            <option value="Kg">Kg (curah)</option>
+            <option value="Gram">Gram (curah)</option>
+            <option value="Bungkus">Bungkus (kemasan)</option>
+            <option value="Sachet">Sachet (kemasan)</option>
+            <option value="Renteng">Renteng (kemasan)</option>
+            <option value="Botol">Botol (kemasan)</option>
+            <option value="Butir">Butir (kemasan)</option>
+            <option value="Tabung">Tabung (kemasan)</option>
+          </select>
+        </div>
+      </div>
+      <!-- v1.6 — Modal/HPP keluar dari "Lanjutan (opsional)": langsung terlihat di form utama -->
+      <label for="f-hpp">Modal / HPP per satuan (Rp) — isi bila mau laporan laba</label>
+      <input id="f-hpp" type="text" inputmode="numeric" placeholder="cth: 12000">
+      <label for="f-barcode">Barcode (opsional — satu produk boleh banyak barcode)</label>
+      <div id="f-barcode-chips" style="margin:4px 0 8px"></div>
+      <div class="baris-scan"><input id="f-barcode" type="text" placeholder="cth: 899123456001">
+      <button id="btn-tambah-barcode" type="button" class="btn btn-garis">＋ Tambah</button>
+      <button id="btn-scan-barcode" type="button" class="btn btn-garis">📷 Scan</button></div>
+      <button id="btn-buat-kode-internal" type="button" class="btn btn-garis" style="font-size:14px">🏷️ Buat Kode Internal (KSR-0001) — untuk produk tanpa barcode kemasan</button>
+      <label for="f-foto">Foto produk (opsional — dari kamera/galeri, diperkecil otomatis)</label>
+      <div class="baris-scan"><input id="f-foto" type="file" accept="image/*" capture="environment">
+      <button id="btn-hapus-foto" type="button" class="btn btn-garis">Hapus Foto</button></div>
+      <div id="f-foto-pratinjau"></div>
+      <details class="lanjutan">
+        <summary>Lanjutan (opsional)</summary>
+        <label for="f-kategori">Kategori</label>
+        <input id="f-kategori" type="text" placeholder="Sembako">
+        <label for="f-stok">Stok (kosong = tidak dibatasi)</label>
+        <input id="f-stok" type="number" min="0" step="any" inputmode="decimal" placeholder="cth: 50">
+        <label for="f-minstok">Ingatkan kalau stok tinggal ... (batas menipis)</label>
+        <input id="f-minstok" type="number" min="0" step="1" inputmode="numeric" placeholder="cth: 5">
+      </details>
+      <button id="btn-simpan-produk" class="btn btn-utama">Simpan Produk</button>
+      <button id="btn-batal-edit" class="btn btn-garis" style="display:none">Batal Ubah</button>
+    </div>
+    <div id="daftar-produk-penuh"></div>
+  </section>
+
+  <section id="tab-riwayat" class="tab">
+    <h2>Riwayat Transaksi</h2>
+    <div id="daftar-riwayat"></div>
+    <button id="btn-riwayat-lebih" class="btn btn-garis" style="display:none">Tampilkan lebih banyak</button>
+    <div id="daftar-terhapus"></div>
+  </section>
+
+  <section id="tab-kasbon" class="tab">
+    <h2>Kasbon — Hutang Pelanggan</h2>
+    <div class="kartu">
+      <h2 style="margin-top:0">Tambah Kasbon</h2>
+      <label for="kb-nama">Nama pelanggan</label>
+      <input id="kb-nama" type="text" placeholder="cth: Bu Siti">
+      <label for="kb-jumlah">Jumlah hutang (Rp)</label>
+      <input id="kb-jumlah" type="number" min="0" inputmode="numeric" placeholder="cth: 50000">
+      <label for="kb-ket">Keterangan (opsional)</label>
+      <input id="kb-ket" type="text" placeholder="cth: Bon beras 5 kg">
+      <button id="btn-tambah-kasbon" class="btn btn-utama">＋ Tambah Kasbon</button>
+      <p class="kasbon-total" id="kb-total" style="margin-top:12px">Tidak ada kasbon yang belum lunas.</p>
+    </div>
+    <h2>Belum Lunas</h2>
+    <div id="daftar-kasbon-belum"></div>
+    <h2>Sudah Lunas</h2>
+    <div id="daftar-kasbon-lunas"></div>
+  </section>
+
+  <section id="tab-laporan" class="tab">
+    <h2>Laporan</h2>
+    <div class="stat">
+      <div class="kartu"><div class="judul">Omset hari ini</div><div class="angka" id="lap-omset">Rp0</div></div>
+      <div class="kartu"><div class="judul">Laba kotor hari ini</div><div class="angka" id="lap-laba">—</div></div>
+      <div class="kartu"><div class="judul">Transaksi hari ini</div><div class="angka" id="lap-jumlah">0 transaksi</div><div style="font-size:13px;color:var(--abu);margin-top:4px" id="lap-metode">💵 Tunai Rp0 • 📱 QRIS Rp0</div></div>
+      <div class="kartu"><div class="judul">Stok menipis</div><div class="angka" id="lap-stok-menipis" style="font-size:15px">Tidak ada</div></div>
+      <div class="kartu"><div class="judul">Omset keseluruhan</div><div class="angka" id="lap-omset-semua">Rp0</div></div>
+      <div class="kartu"><div class="judul">Laba keseluruhan</div><div class="angka" id="lap-laba-semua">—</div></div>
+    </div>
+    <p class="catatan" id="lap-jumlah-semua"></p>
+    <div class="kartu">
+      <h2 style="margin-top:0">Produk Terlaris</h2>
+      <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Sepanjang waktu — paling banyak terjual dulu (maksimal 5).</p>
+      <div id="lap-terlaris"></div>
+    </div>
+    <div class="kartu">
+      <h2 style="margin-top:0">Rekap Harian</h2>
+      <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Omset, laba, dan jumlah transaksi tiap tanggal — terbaru dulu.</p>
+      <div id="lap-rekap"></div>
+    </div>
+    <p class="catatan">KasirKu v1.7.8 — semua data tersimpan di perangkat ini saja.</p>
+  </section>
+
+  <section id="tab-pengaturan" class="tab">
+    <h2>Pengaturan</h2>
+    <div class="kartu" id="lisensi-kartu">
+      <h2 style="margin-top:0">Lisensi</h2>
+      <p style="font-size:14px"><b id="lisensi-status">—</b></p>
+      <p style="font-size:13px;color:var(--abu)" id="lisensi-device"></p>
+      <p style="font-size:13px;color:var(--abu)">Masa percobaan 7 hari sejak install pertama. Sesudah aktif dengan kode, aplikasi kebuka selamanya dan tetap offline.</p>
+      <div id="lisensi-kode-bungkus">
+        <label for="lisensi-kode">Masukkan kode unik</label>
+        <input id="lisensi-kode" type="text" placeholder="KSR-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters">
+        <button id="btn-aktifkan-kode-pengaturan" class="btn btn-utama">Aktifkan Kode</button>
+        <p id="lisensi-pesan" style="font-size:13px;color:var(--abu)"></p>
+      </div>
+    </div>
+    <div class="kartu">
+      <h2 style="margin-top:0">Printer Bluetooth</h2>
+      <p style="font-size:14px"><b id="printer-status">—</b></p>
+      <p style="font-size:13px;color:var(--abu)">Printer thermal Bluetooth 58mm (ESC/POS). Nyalakan printernya, lalu ketuk Cari Perangkat. Bila tidak ada printer Bluetooth, tombol Cetak tetap memakai dialog print sistem.</p>
+      <button id="btn-cari-printer" class="btn btn-utama">🔍 Cari Perangkat</button>
+      <div id="printer-loading"><span class="spinner"></span><span>Mencari perangkat...</span></div>
+      <div id="printer-daftar"></div>
+      <button id="btn-cetak-tes" class="btn btn-garis">🖨️ Cetak Tes</button>
+      <button id="btn-lupakan-printer" class="btn btn-garis">Lupakan Printer</button>
+    </div>
+    <div class="kartu" id="qris-kartu">
+      <h2 style="margin-top:0">Pembayaran QRIS</h2>
+      <p style="font-size:14px;color:var(--abu)">Unggah gambar QRIS warung supaya pembeli bisa scan di kasir. Tiap warung pakai QRIS-nya sendiri.</p>
+      <div class="baris-scan"><input id="qris-file" type="file" accept="image/*">
+      <button id="btn-hapus-qris" type="button" class="btn btn-garis">Hapus QRIS</button></div>
+      <div id="qris-pratinjau"></div>
+    </div>
+    <div class="kartu">
+      <h2 style="margin-top:0">Cadangan Data</h2>
+      <p style="font-size:14px;color:var(--abu)">Simpan cadangan (produk, riwayat, kasbon, gambar QRIS) ke satu file. Kirim file itu ke WA sendiri atau Google Drive supaya aman kalau HP hilang.</p>
+      <p id="cadangan-terakhir" style="font-size:14px">Cadangan terakhir: Belum pernah</p>
+      <button id="btn-backup-buat" class="btn btn-utama">💾 Buat Cadangan</button>
+      <button id="btn-backup-pulihkan" class="btn btn-garis">📥 Pulihkan dari Cadangan</button>
+      <input id="file-pulihkan" type="file" accept=".json,application/json" style="display:none">
+      <button id="btn-ekspor-csv" class="btn btn-garis">📊 Ekspor Rekap ke Excel (CSV)</button>
+      <p class="catatan" style="text-align:left">Pulihkan mengganti data yang ada sekarang di HP. Cadangan tidak berisi kode lisensi.</p>
+    </div>
+    <div class="kartu">
+      <h2 style="margin-top:0">Ukuran huruf</h2>
+      <div class="pengaturan-opsi">
+        <label><input type="radio" name="huruf" value="normal"> Normal</label>
+        <label><input type="radio" name="huruf" value="besar"> Besar</label>
+        <label><input type="radio" name="huruf" value="sangat"> Sangat Besar</label>
+      </div>
+      <p class="catatan" style="text-align:left">Pilihan tersimpan di perangkat dan berlaku untuk semua halaman.</p>
+    </div>
+    <div class="kartu">
+      <h2 style="margin-top:0">Tentang KasirKu</h2>
+      <p style="font-size:14px;color:var(--abu)">Versi 1.7.8 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button id="nav-kasir" class="aktif"><span class="ikon">🧾</span>Kasir</button>
+  <button id="nav-pilih"><span class="ikon">🛒</span>Pilih</button>
+  <button id="nav-produk"><span class="ikon">📦</span>Produk</button>
+  <button id="nav-riwayat"><span class="ikon">📋</span>Riwayat</button>
+  <button id="nav-laporan"><span class="ikon">📊</span>Laporan</button>
+  <button id="nav-kasbon"><span class="ikon">📒</span>Kasbon</button>
+</nav>
+
+<div id="scan-modal">
+  <div id="scan-reader"></div>
+  <p id="scan-status">Arahkan kamera ke barcode produk...</p>
+  <button id="btn-flash" class="btn btn-garis" style="display:none">🔦 Lampu</button>
+  <button id="btn-tutup-scan" class="btn btn-garis">Tutup Scan</button>
+</div>
+
+<div id="cetak-modal">
+  <div class="kunci-kartu">
+    <h2 style="margin-top:0">Cetak Label Barcode</h2>
+    <p style="font-size:14px;color:var(--abu)"><span id="cetak-nama"></span> — label berisi nama produk + harga + barcode CODE128. Tempel label ke kemasan, lalu scan dengan aplikasi.</p>
+    <label for="cetak-kode">Barcode yang dicetak</label>
+    <select id="cetak-kode"></select>
+    <label for="cetak-jumlah">Jumlah label (1–48)</label>
+    <input id="cetak-jumlah" type="number" min="1" max="48" value="12" inputmode="numeric">
+    <button id="btn-jalankan-cetak" class="btn btn-utama">🖨️ Cetak</button>
+    <button id="btn-tutup-cetak" class="btn btn-garis">Batal</button>
+  </div>
+</div>
+
+<div id="area-cetak"></div>
+
+<div id="layar-sambutan">
+  <div class="kunci-kartu">
+    <h2>Selamat datang di KasirKu 👋</h2>
+    <p>Kasir warung yang simpel: scan atau ketuk nama, total langsung terhitung. Pilih salah satu di bawah ini.</p>
+    <button id="btn-sambutan-trial" class="btn btn-utama" style="font-size:18px;padding:16px">🎉 Coba Gratis 7 Hari</button>
+    <button id="btn-sambutan-kode" class="btn btn-garis" style="font-size:17px;padding:14px">🔑 Masukkan Kode Unik</button>
+    <p style="font-size:13px;margin-top:14px">Sudah beli? Kode dikirim ke email sesudah pembayaran. Ada pertanyaan? Hubungi kami:</p>
+    <p style="font-size:14px"><a id="sambutan-email" href="mailto:arifinskansal@gmail.com">✉️ arifinskansal@gmail.com</a></p>
+    <p style="font-size:14px"><a id="sambutan-beli" href="https://lynk.id/immangarif/gz5eplyzomoo">🛒 Beli Kode di lynk.id</a></p>
+  </div>
+</div>
+
+<div id="layar-kunci">
+  <div class="kunci-kartu">
+    <h2 id="kunci-judul">🔒 Masa Percobaan Habis</h2>
+    <p id="kunci-subjudul">Masa percobaan 7 hari sudah habis. Masukkan kode lisensi untuk membuka KasirKu selamanya. Kode dikirim ke email sesudah pembayaran.</p>
+    <p class="kunci-pesan" id="kunci-pesan"></p>
+    <label for="kunci-kode" style="text-align:left">Kode lisensi</label>
+    <input id="kunci-kode" type="text" placeholder="KSR-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters">
+    <button id="btn-aktifkan-kode" class="btn btn-utama">Aktifkan</button>
+    <button id="btn-kunci-kembali" class="btn btn-garis" style="display:none">← Kembali</button>
+    <p style="font-size:13px;margin-top:12px">Kode tidak bisa? Hubungi kami:</p>
+    <div class="kunci-tombol">
+      <a id="kunci-email" class="kunci-email" href="#">✉️ Email</a>
+      <a id="kunci-beli" class="kunci-beli" href="https://lynk.id/immangarif/gz5eplyzomoo">🛒 Beli Kode di lynk.id</a>
+    </div>
+    <p style="font-size:12px;margin-top:10px">Kode berlaku 30 hari sejak diterbitkan dan hanya bisa dipakai di satu perangkat.</p>
+  </div>
+</div>
+
+<div id="dlg-latar">
+  <div class="kunci-kartu">
+    <p id="dlg-teks"></p>
+    <div class="dlg-tombol">
+      <button id="dlg-ya" class="btn btn-utama">Ya</button>
+      <button id="dlg-batal" class="btn btn-garis">Tidak</button>
+    </div>
+  </div>
+</div>
+
+<div id="hapus-latar">
+  <div class="kunci-kartu">
+    <p id="hapus-teks">Hapus transaksi ini?</p>
+    <p class="hapus-sub">Bisa dipulihkan 1 hari.</p>
+    <div class="dlg-tombol">
+      <button id="btn-hapus-simpan" class="btn btn-utama">💾 Simpan dulu</button>
+      <button id="btn-hapus-ya" class="btn btn-bahaya">Hapus</button>
+      <button id="btn-hapus-batal" class="btn btn-garis">Batal</button>
+    </div>
+  </div>
+</div>
+
+<div id="cadangan-latar">
+  <div class="kunci-kartu">
+    <p id="cadangan-teks">Sudah 30 hari sejak cadangan terakhir.</p>
+    <div class="dlg-tombol">
+      <button id="btn-cadangan-ya" class="btn btn-utama">💾 Cadangkan</button>
+      <button id="btn-cadangan-nanti" class="btn btn-garis">Nanti</button>
+    </div>
+  </div>
+</div>
+
+<div id="update-latar">
+  <div class="kunci-kartu">
+    <p id="update-teks">Ada versi baru.</p>
+    <div class="dlg-tombol">
+      <button id="btn-update-unduh" class="btn btn-utama">Unduh</button>
+      <button id="btn-update-nanti" class="btn btn-garis">Nanti</button>
+    </div>
+  </div>
+</div>
+
+<div id="cetak-pilih-latar">
+  <div class="kunci-kartu">
+    <p id="cetak-pilih-teks">Cetak lewat apa?</p>
+    <div class="dlg-tombol">
+      <button id="btn-cetak-pilih-pdf" class="btn btn-utama">📄 PDF / Printer biasa</button>
+      <button id="btn-cetak-pilih-bt" class="btn btn-utama">🖨️ Printer Bluetooth</button>
+      <button id="btn-cetak-pilih-batal" class="btn btn-garis">Batal</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="crop-modal">
+  <div id="crop-viewport"><img id="crop-gambar" src="" alt=""></div>
+  <p id="crop-status">Geser untuk atur posisi.</p>
+  <div class="crop-zoom">
+    <button id="btn-crop-kecil" class="btn btn-garis" type="button">－</button>
+    <button id="btn-crop-besar" class="btn btn-garis" type="button">＋</button>
+  </div>
+  <button id="btn-crop-potong" class="btn btn-utama" type="button">✂️ Potong</button>
+  <button id="btn-crop-batal" class="btn btn-garis" type="button">Batal</button>
+</div>
+
+<div id="qris-fullscreen">
+  <img id="qris-full-gambar" src="" alt="Kode QRIS">
+  <div id="qris-full-total">Rp0</div>
+  <button id="btn-qris-full-simpan" class="btn btn-utama" type="button">💾 Simpan Transaksi</button>
+  <button id="btn-qris-full-tutup" class="btn btn-garis" type="button">✕ Tutup</button>
+</div>
+
+<script src="html5-qrcode.min.js"></script>
+<script src="jsbarcode.min.js"></script>
+<script src="kasir.js"></script>
+</body>
+</html>
