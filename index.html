@@ -175,8 +175,8 @@
   #dlg-teks { font-size: 17px; font-weight: 700; margin: 4px 0 16px; }
   /* v1.7 — modal hapus transaksi + pengingat cadangan (pola sama seperti #dlg-latar) */
   /* v1.7.4 — dialog pemberitahuan update (pola yang sama) */
-  #hapus-latar, #cadangan-latar, #update-latar, #cetak-pilih-latar { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 70; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
-  #hapus-latar .kunci-kartu, #cadangan-latar .kunci-kartu, #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu { background: #fff; border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; text-align: center; }
+  #hapus-latar, #cadangan-latar, #update-latar, #cetak-pilih-latar, #keluar-latar { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.6); z-index: 70; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #hapus-latar .kunci-kartu, #cadangan-latar .kunci-kartu, #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu, #keluar-latar .kunci-kartu { background: #fff; border-radius: 16px; padding: 20px; max-width: 420px; width: 100%; text-align: center; }
   #hapus-teks, #cadangan-teks, #update-teks { font-size: 17px; font-weight: 700; margin: 4px 0 8px; }
   .hapus-sub { font-size: 14px; color: var(--abu); margin: 0 0 16px; }
   .btn-bahaya { background: var(--merah); color: #fff; }
@@ -206,7 +206,7 @@
     #layar-kunci .kunci-kartu, #layar-sambutan .kunci-kartu,
     #cetak-modal .kunci-kartu, #dlg-latar .kunci-kartu,
     #hapus-latar .kunci-kartu, #cadangan-latar .kunci-kartu,
-    #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu { max-width: 560px; }
+    #update-latar .kunci-kartu, #cetak-pilih-latar .kunci-kartu, #keluar-latar .kunci-kartu { max-width: 560px; }
     #scan-reader, #btn-flash, #btn-tutup-scan { max-width: 560px; }
   }
   @media print {
@@ -403,7 +403,7 @@
       <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Omset, laba, dan jumlah transaksi tiap tanggal — terbaru dulu.</p>
       <div id="lap-rekap"></div>
     </div>
-    <p class="catatan">KasirKu v1.7.8 — semua data tersimpan di perangkat ini saja.</p>
+    <p class="catatan">KasirKu v1.8.1 — semua data tersimpan di perangkat ini saja.</p>
   </section>
 
   <section id="tab-pengaturan" class="tab">
@@ -418,7 +418,15 @@
         <input id="lisensi-kode" type="text" placeholder="KSR-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters">
         <button id="btn-aktifkan-kode-pengaturan" class="btn btn-utama">Aktifkan Kode</button>
         <p id="lisensi-pesan" style="font-size:13px;color:var(--abu)"></p>
+        <button id="btn-pindah-tampil-pengaturan" class="btn btn-garis" style="display:none;margin-top:8px">Pindah ke Perangkat Ini</button>
+        <div id="lisensi-pindah-bungkus" style="display:none;margin-top:8px">
+          <label for="lisensi-pindah-email">Email pembeli (yang dipakai saat beli)</label>
+          <input id="lisensi-pindah-email" type="email" placeholder="nama@email.com" autocomplete="off">
+          <button id="btn-pindah-perangkat-pengaturan" class="btn btn-utama">Pindahkan Lisensi</button>
+          <p id="lisensi-pindah-pesan" style="font-size:13px;color:var(--abu)"></p>
+        </div>
       </div>
+      <button id="btn-keluar-perangkat" class="btn btn-garis" style="display:none">🚪 Keluar dari perangkat ini</button>
     </div>
     <div class="kartu">
       <h2 style="margin-top:0">Printer Bluetooth</h2>
@@ -458,7 +466,9 @@
     </div>
     <div class="kartu">
       <h2 style="margin-top:0">Tentang KasirKu</h2>
-      <p style="font-size:14px;color:var(--abu)">Versi 1.7.8 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
+      <p style="font-size:14px;color:var(--abu)">Versi 1.8.1 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
+      <p style="font-size:14px;color:var(--abu)">Suka dengan versi web ini? Unduh aplikasi Android-nya supaya bisa dipakai di HP, tetap offline dan datanya tersimpan di HP sendiri.</p>
+      <a id="unduh-android" href="https://lynk.id/immangarif/4dvo1rqp7r3v" target="_blank" rel="noopener" style="display:block;padding:12px;border-radius:12px;background:var(--hijau);color:#fff;font-size:15px;font-weight:700;text-decoration:none;text-align:center">⬇️ Unduh Aplikasi Android</a>
     </div>
   </section>
 </main>
@@ -514,6 +524,20 @@
     <label for="kunci-kode" style="text-align:left">Kode lisensi</label>
     <input id="kunci-kode" type="text" placeholder="KSR-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters">
     <button id="btn-aktifkan-kode" class="btn btn-utama">Aktifkan</button>
+    <button id="btn-pindah-tampil" class="btn btn-garis" style="display:none;margin-top:8px">Pindah ke Perangkat Ini</button>
+    <div id="pindah-bungkus" style="display:none;margin-top:8px">
+      <label for="kunci-pindah-email" style="text-align:left">Email pembeli (yang dipakai saat beli)</label>
+      <input id="kunci-pindah-email" type="email" placeholder="nama@email.com" autocomplete="off">
+      <button id="btn-pindah-perangkat" class="btn btn-utama">Pindahkan Lisensi</button>
+      <p class="kunci-pesan" id="kunci-pindah-pesan"></p>
+    </div>
+    <button id="btn-lupa-kode" class="btn btn-garis" style="margin-top:8px">Lupa kode?</button>
+    <div id="lupa-kode-bungkus" style="display:none;margin-top:8px">
+      <label for="kunci-lupa-email" style="text-align:left">Email pembeli (yang dipakai saat beli)</label>
+      <input id="kunci-lupa-email" type="email" placeholder="nama@email.com" autocomplete="off">
+      <button id="btn-kirim-ulang" class="btn btn-utama">Kirim Kode ke Email</button>
+      <p class="kunci-pesan" id="kunci-lupa-pesan"></p>
+    </div>
     <button id="btn-kunci-kembali" class="btn btn-garis" style="display:none">← Kembali</button>
     <p style="font-size:13px;margin-top:12px">Kode tidak bisa? Hubungi kami:</p>
     <div class="kunci-tombol">
@@ -562,6 +586,16 @@
     <div class="dlg-tombol">
       <button id="btn-update-unduh" class="btn btn-utama">Unduh</button>
       <button id="btn-update-nanti" class="btn btn-garis">Nanti</button>
+    </div>
+  </div>
+</div>
+
+<div id="keluar-latar">
+  <div class="kunci-kartu">
+    <p id="keluar-teks"><b>Keluar dari perangkat ini?</b><br>Lisensi bisa dipakai lagi di perangkat lain.</p>
+    <div class="dlg-tombol">
+      <button id="btn-keluar-ya" class="btn btn-utama">Keluar</button>
+      <button id="btn-keluar-batal" class="btn btn-garis">Batal</button>
     </div>
   </div>
 </div>

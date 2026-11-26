@@ -1,4 +1,5 @@
-/* KasirKu v1.7.8 — logika kasir toko lokal (web standar murni).
+/* KasirKu v1.8.1 — logika kasir toko lokal (web standar murni).
+   v1.8.1 (25 Nov 2026): (1) AKTIVASI KODE SAJA — kolom email DIHAPUS dari semua tempat aktivasi (layar kunci, kartu Lisensi); aktivasi hanya butuh kode seperti dulu (perintah ARIFIN 21:15 WITA: v1.8.0 "terlalu ribet"). Email HANYA diminta di dua tempat: "Lupa kode?" (kirim ulang kode) dan "Pindah ke perangkat ini" (bila kode sudah dipakai perangkat lain + email cocok -> ikat ulang; record lama tanpa email menerima email yang dimasukkan). (2) PESAN GALAT JUJUR — fetch yang ditolak hanya disebut "tidak ada internet" bila navigator.onLine === false; bila internet menyala tapi fetch gagal -> "Tidak bisa terhubung ke server"; bila server menjawab dengan status bukan 2xx (mis. rules menolak tulis -> permission denied) -> "Server menolak, coba lagi". Berlaku di aktivasi, pindah perangkat, kirim ulang, dan keluar.
    v1.7.8 (25 Nov 2026): (1) CROP PERSEGI — satu pemotong untuk foto
    produk + gambar QRIS: sesudah pilih gambar, tampil bingkai persegi
    (geser untuk atur posisi, tombol ＋/－ untuk zoom, "Potong" simpan,
@@ -829,40 +830,194 @@
     return "KSR-" + ("000" + n).slice(-4);
   }
 
+  /* v1.8.0 — email pembeli: huruf kecil + tanpa spasi (perbandingan
+     abaikan huruf besar/kecil). */
+  function normalisasiEmail(email) {
+    return String(email == null ? "" : email).trim().toLowerCase();
+  }
+  function validasiEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalisasiEmail(email));
+  }
+
+  /* v1.8.1 — bedakan "benar-benar offline" dari "server menjawab tapi
+     menolak/gagal" (temuan ARIFIN 25 Nov 21:17 WITA: internet HP menyala
+     tapi aplikasi menulis "tidak ada internet"). Aturan: fetch yang
+     DITOLAK (jaringan) hanya boleh disebut "tidak ada internet" bila
+     navigator.onLine === false; bila internet menyala tapi fetch gagal
+     -> "tidak-bisa-terhubung"; bila server menjawab dengan status bukan
+     2xx (mis. rules menolak tulis -> permission denied) -> "server-
+     menolak". JANGAN tulis "tidak ada internet" bila server sempat
+     menjawab. */
+  function alasanJaringan() {
+    try {
+      if (typeof navigator !== "undefined" && navigator && navigator.onLine === false) return "tidak-ada-internet";
+    } catch (e) {}
+    return "tidak-bisa-terhubung";
+  }
+
   /* Cek kode ke Firebase RTDB (REST) — fetchFn disuntik supaya bisa diuji.
      Mengembalikan Promise {ok, alasan?, sudah?}.
      Alasan: format-salah | belum-diatur | tidak-ditemukan | kedaluwarsa |
-     dipakai | tidak-ada-internet | gagal-simpan.
-     PATCH mengikat deviceId + status "dipakai" SEKALIGUS (satu panggilan);
-     rules RTDB hanya mengizinkan pengikatan bila status masih "belum"
-     dan kode belum kedaluwarsa — dua perangkat tidak bisa memakai satu
-     kode yang sama. */
+     dipakai | tidak-ada-internet | tidak-bisa-terhubung | server-menolak.
+     v1.8.1 — AKTIVASI KODE SAJA (perintah ARIFIN 25 Nov 21:15 WITA):
+     email TIDAK lagi diminta/dicocokkan di sini; bila status "dipakai"
+     + deviceId perangkat lain -> "dipakai" (pindah diurus fungsi
+     pindahPerangkat, bukan di sini). Slot kosong sesudah keluar
+     (dipakai + deviceId kosong) langsung diikat tanpa email.
+     PATCH mengikat deviceId (+ status "dipakai" bila masih "belum")
+     SEKALIGUS (satu panggilan, fetch polos TANPA secret); rules RTDB
+     mengizinkan tulis bila kode belum kedaluwarsa dan status "belum"
+     atau "dipakai" (berkas backend/firebase-rules.json WAJIB
+     diterbitkan ulang di console). */
   function cekKodeFirebase(dbUrl, kode, deviceId, fetchFn, sekarangMs) {
     kode = normalisasiKode(kode);
     if (!validasiFormatKode(kode)) return Promise.resolve({ ok: false, alasan: "format-salah" });
     var url = normalisasiUrlDatabase(dbUrl);
     if (!url) return Promise.resolve({ ok: false, alasan: "belum-diatur" });
     var f = fetchFn || (typeof fetch !== "undefined" ? fetch : null);
-    if (!f) return Promise.resolve({ ok: false, alasan: "tidak-ada-internet" });
+    if (!f) return Promise.resolve({ ok: false, alasan: alasanJaringan() });
     var sekarang = Number(sekarangMs) || Date.now();
     var alamat = url + "/kode/" + encodeURIComponent(kode) + ".json";
-    return f(alamat).then(function (r) { return r.json(); }).then(function (rek) {
-      if (!rek) return { ok: false, alasan: "tidak-ditemukan" };
-      if (rek.status === "dipakai" && rek.deviceId && rek.deviceId !== deviceId)
-        return { ok: false, alasan: "dipakai" };
-      if (rek.status === "dipakai" && rek.deviceId === deviceId)
-        return { ok: true, sudah: true };
-      if (rek.berlakuSampaiMs && Number(rek.berlakuSampaiMs) < sekarang)
-        return { ok: false, alasan: "kedaluwarsa" };
-      return f(alamat, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: deviceId, status: "dipakai" })
-      }).then(function (r2) {
-        if (!r2.ok) return { ok: false, alasan: "gagal-simpan" };
-        return { ok: true };
-      });
-    }).catch(function () { return { ok: false, alasan: "tidak-ada-internet" }; });
+    return f(alamat).then(function (r) {
+      if (!r || r.ok === false) return { ok: false, alasan: "server-menolak" };
+      return r.json().then(function (rek) {
+        if (!rek) return { ok: false, alasan: "tidak-ditemukan" };
+        if (rek.status === "dipakai" && rek.deviceId && rek.deviceId !== deviceId)
+          return { ok: false, alasan: "dipakai" };
+        if (rek.status === "dipakai" && rek.deviceId === deviceId)
+          return { ok: true, sudah: true };
+        if (rek.berlakuSampaiMs && Number(rek.berlakuSampaiMs) < sekarang)
+          return { ok: false, alasan: "kedaluwarsa" };
+        var patch = { deviceId: deviceId };
+        /* Status hanya ditulis bila masih "belum" — menulis status
+           "dipakai" di atas status "dipakai" ditolak rules. */
+        if (rek.status !== "dipakai") patch.status = "dipakai";
+        return f(alamat, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch)
+        }).then(function (r2) {
+          if (!r2 || r2.ok === false) return { ok: false, alasan: "server-menolak" };
+          return { ok: true };
+        });
+      }, function () { return { ok: false, alasan: "server-menolak" }; });
+    }).catch(function () { return { ok: false, alasan: alasanJaringan() }; });
+  }
+
+  /* v1.8.1 — pindah lisensi ke perangkat ini (tombol "Pindah ke
+     perangkat ini" sesudah aktivasi ditolak "dipakai"). Email pembeli
+     HARUS cocok dengan email di record (abaikan huruf besar/kecil);
+     bila record LAMA tanpa email tersimpan, email yang dimasukkan
+     diterima dan ikut diikat ke record (migrasi). PATCH memakai
+     mekanisme yang SAMA dengan aktivasi (fetch polos TANPA secret):
+     {deviceId, perangkatLama, email?} (+ status bila masih "belum").
+     Mengembalikan Promise {ok, alasan?, sudah?, ikatUlang?}. */
+  function pindahPerangkat(dbUrl, kode, deviceId, email, fetchFn, sekarangMs) {
+    kode = normalisasiKode(kode);
+    if (!validasiFormatKode(kode)) return Promise.resolve({ ok: false, alasan: "format-salah" });
+    var emailDiketik = normalisasiEmail(email);
+    if (!validasiEmail(emailDiketik)) return Promise.resolve({ ok: false, alasan: "email-salah" });
+    var url = normalisasiUrlDatabase(dbUrl);
+    if (!url) return Promise.resolve({ ok: false, alasan: "belum-diatur" });
+    var f = fetchFn || (typeof fetch !== "undefined" ? fetch : null);
+    if (!f) return Promise.resolve({ ok: false, alasan: alasanJaringan() });
+    var sekarang = Number(sekarangMs) || Date.now();
+    var alamat = url + "/kode/" + encodeURIComponent(kode) + ".json";
+    return f(alamat).then(function (r) {
+      if (!r || r.ok === false) return { ok: false, alasan: "server-menolak" };
+      return r.json().then(function (rek) {
+        if (!rek) return { ok: false, alasan: "tidak-ditemukan" };
+        if (rek.status === "dipakai" && rek.deviceId === deviceId)
+          return { ok: true, sudah: true };
+        var emailRek = normalisasiEmail(rek.email);
+        if (emailRek && emailDiketik !== emailRek)
+          return { ok: false, alasan: "email-tidak-cocok" };
+        if (rek.berlakuSampaiMs && Number(rek.berlakuSampaiMs) < sekarang)
+          return { ok: false, alasan: "kedaluwarsa" };
+        var patch = { deviceId: deviceId, perangkatLama: rek.deviceId || null };
+        if (rek.status !== "dipakai") patch.status = "dipakai";
+        if (!emailRek && emailDiketik) patch.email = emailDiketik;
+        return f(alamat, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch)
+        }).then(function (r2) {
+          if (!r2 || r2.ok === false) return { ok: false, alasan: "server-menolak" };
+          return { ok: true, ikatUlang: true };
+        });
+      }, function () { return { ok: false, alasan: "server-menolak" }; });
+    }).catch(function () { return { ok: false, alasan: alasanJaringan() }; });
+  }
+
+  /* v1.8.0 — lepas ikatan kode dari perangkat ini (tombol Keluar):
+     PATCH deviceId jadi null (di RTDB, null = hapus isi), status
+     TETAP "dipakai" supaya jendela 30 hari tidak ke-reset. Mekanisme
+     yang SAMA dengan aktivasi: fetch polos TANPA secret; rules
+     mengizinkan hapus deviceId bila status "dipakai". */
+  function lepasIkatanKode(dbUrl, kode, fetchFn) {
+    kode = normalisasiKode(kode);
+    if (!validasiFormatKode(kode)) return Promise.resolve({ ok: false, alasan: "format-salah" });
+    var url = normalisasiUrlDatabase(dbUrl);
+    if (!url) return Promise.resolve({ ok: false, alasan: "belum-diatur" });
+    var f = fetchFn || (typeof fetch !== "undefined" ? fetch : null);
+    if (!f) return Promise.resolve({ ok: false, alasan: alasanJaringan() });
+    var alamat = url + "/kode/" + encodeURIComponent(kode) + ".json";
+    return f(alamat, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: null })
+    }).then(function (r) {
+      if (!r || r.ok === false) return { ok: false, alasan: "server-menolak" };
+      return { ok: true };
+    }).catch(function () { return { ok: false, alasan: alasanJaringan() }; });
+  }
+
+  /* v1.8.0 — cek ulang ikatan saat aplikasi dibuka (hanya instalasi
+     berlisensi): terkunci = record punya deviceId yang BUKAN perangkat
+     ini (lisensi pindah / ikat ulang darurat dari perangkat lain).
+     Gagal baca / tidak ada record / deviceId kosong = tidak terkunci
+     (jangan kunci pengguna karena gangguan jaringan). */
+  function periksaIkatanKode(dbUrl, kode, deviceId, fetchFn) {
+    kode = normalisasiKode(kode);
+    if (!validasiFormatKode(kode)) return Promise.resolve({ terkunci: false });
+    var url = normalisasiUrlDatabase(dbUrl);
+    if (!url) return Promise.resolve({ terkunci: false });
+    var f = fetchFn || (typeof fetch !== "undefined" ? fetch : null);
+    if (!f) return Promise.resolve({ terkunci: false });
+    var alamat = url + "/kode/" + encodeURIComponent(kode) + ".json";
+    return f(alamat).then(function (r) {
+      if (!r || r.ok === false) return { terkunci: false };
+      return r.json();
+    }).then(function (rek) {
+      if (!rek || !rek.deviceId) return { terkunci: false };
+      return { terkunci: rek.deviceId !== deviceId };
+    }).catch(function () { return { terkunci: false }; });
+  }
+
+  /* v1.8.0 — minta kirim ulang kode ke email (tombol Lupa kode?).
+     URL web app Apps Script TANPA token (?k= TIDAK ditempel di sini):
+     aksi kirimUlang memang dibolehkan server tanpa token karena ia
+     HANYA mengirim kode ke email yang sudah tercatat pernah membeli,
+     dan TIDAK PERNAH mengembalikan kode di dalam respons — jadi
+     tidak ada yang bocor bila dipanggil siapa pun. Penerbitan kode
+     baru tetap butuh ?k= dan hanya lynk.id yang tahu URL lengkapnya.
+     Hasilnya sengaja tidak dibedakan (ok:true untuk jawaban server
+     apa pun) supaya tampilan di aplikasi selalu memakai pesan generik
+     yang sama; hanya gagal jaringan yang dibedakan. */
+  var WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx5tlcEQTfQImgejkJxaQ3CtwPK_8nvXiZQm_fLS3Yb26pM9Ym_cps-M204veAb8Ko0YA/exec";
+  function mintaKirimUlang(webhookUrl, email, fetchFn) {
+    email = normalisasiEmail(email);
+    if (!validasiEmail(email)) return Promise.resolve({ ok: false, alasan: "email-salah" });
+    var f = fetchFn || (typeof fetch !== "undefined" ? fetch : null);
+    if (!f) return Promise.resolve({ ok: false, alasan: alasanJaringan() });
+    return f(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aksi: "kirimUlang", email: email })
+    }).then(function (r) {
+      if (r && r.ok === false) return { ok: false, alasan: "server-menolak" };
+      return { ok: true };
+    }).catch(function () { return { ok: false, alasan: alasanJaringan() }; });
   }
 
   /* ================= CROP PERSEGI (v1.7.8) =================
@@ -901,7 +1056,7 @@
      TANPA ?auth=, TANPA secret (secret TIDAK PERNAH masuk aplikasi).
      Mengembalikan Promise berisi isi node {versi, vc, tautan} atau
      null bila node tidak ada / fetch gagal / tidak ada internet. */
-  var VERSI_KODE = 22;   /* HARUS sama dengan versionCode AndroidManifest */
+  var VERSI_KODE = 24;   /* HARUS sama dengan versionCode AndroidManifest */
   var LINK_UPDATE = "https://lynk.id/immangarif/4dvo1rqp7r3v"; /* listing gratis */
   var KEY_UPDATE_TERAKHIR = "kasirku_update_terakhir_v1"; /* tanggal YYYY-MM-DD terakhir dialog tampil */
   function bacaInfoVersi(dbUrl, fetchFn) {
@@ -1121,6 +1276,11 @@
     normalisasiUrlDatabase: normalisasiUrlDatabase,
     hitungUkuranDataUrl: hitungUkuranDataUrl, buatKodeInternal: buatKodeInternal,
     cekKodeFirebase: cekKodeFirebase,
+    /* v1.8.1 — lisensi kode saja + pindah perangkat + pesan galat jujur */
+    normalisasiEmail: normalisasiEmail, validasiEmail: validasiEmail,
+    alasanJaringan: alasanJaringan, pindahPerangkat: pindahPerangkat,
+    lepasIkatanKode: lepasIkatanKode, periksaIkatanKode: periksaIkatanKode,
+    WEBHOOK_URL: WEBHOOK_URL, mintaKirimUlang: mintaKirimUlang,
     /* v1.7.4 — pemberitahuan update */
     VERSI_KODE: VERSI_KODE, LINK_UPDATE: LINK_UPDATE,
     KEY_UPDATE_TERAKHIR: KEY_UPDATE_TERAKHIR,
@@ -1242,28 +1402,38 @@
     /* v1.7.3 — kolom masukkan kode di kartu Lisensi hanya bila belum aktif. */
     var kodeWrap = el("lisensi-kode-bungkus");
     if (kodeWrap) kodeWrap.style.display = st.status === "aktif" ? "none" : "";
+    /* v1.8.1 — tombol Keluar hanya bila berlisensi kode. */
+    var keluar = el("btn-keluar-perangkat");
+    if (keluar) keluar.style.display = st.status === "aktif" ? "" : "none";
     perbaruiTautanPenjual();
     /* v1.7 — pengingat cadangan 30 hari (hanya bila layar utama terbuka). */
     periksaPengingatCadangan();
     /* v1.7.4 — pemberitahuan update (hanya bila layar utama terbuka). */
     periksaPembaruan();
+    /* v1.8.0 — cek ulang ikatan lisensi (hanya instalasi berlisensi). */
+    periksaLisensiUlang();
   }
 
   /* v1.7.3 — aktivasi kode dari kolom mana pun (layar kunci / kartu
-     Lisensi di Pengaturan): jalur yang sama, URL database hardcode. */
-  function aktifkanKodeDari(kodeInput, pesanEl) {
+     Lisensi di Pengaturan): jalur yang sama, URL database hardcode.
+     v1.8.1 — aktivasi KODE SAJA (tanpa email); bila kode sudah dipakai
+     perangkat lain, tampilkan tombol "Pindah ke perangkat ini"
+     (pindahTampilEl) — pindah diurus pindahPerangkatDari. */
+  function aktifkanKodeDari(kodeInput, pesanEl, pindahTampilEl, pindahBungkusEl) {
     var kode = kodeInput ? kodeInput.value : "";
     if (!L.validasiFormatKode(kode)) {
       if (pesanEl) pesanEl.textContent = "Format kode salah. Contoh: KSR-AB12-CD34-EF56";
       return;
     }
     if (pesanEl) pesanEl.textContent = "Memeriksa kode...";
+    sembunyikanPindah(pindahTampilEl, pindahBungkusEl);
     L.cekKodeFirebase(DB_URL, kode, lisensi.deviceId,
       (typeof fetch !== "undefined" ? fetch : null), Date.now())
       .then(function (hasil) {
         if (hasil.ok) {
           lisensi.aktif = true;
           lisensi.kode = L.normalisasiKode(kode);
+          lisensi.email = null;
           simpanLisensi();
           terapkanLisensi();
           toast("Kode diterima — aplikasi aktif selamanya");
@@ -1274,18 +1444,175 @@
             "kedaluwarsa": "Kode sudah kedaluwarsa (berlaku 30 hari). Hubungi penjual.",
             "dipakai": "Kode sudah dipakai di perangkat lain.",
             "tidak-ada-internet": "Tidak ada internet — nyalakan internet sekali untuk aktivasi.",
-            "gagal-simpan": "Gagal menyimpan aktivasi — coba lagi.",
+            "tidak-bisa-terhubung": "Tidak bisa terhubung ke server — coba lagi.",
+            "server-menolak": "Server menolak — coba lagi.",
+            "format-salah": "Format kode salah."
+          }[hasil.alasan] || "Kode tidak bisa dipakai.";
+          if (pesanEl) pesanEl.textContent = teks;
+          if (hasil.alasan === "dipakai" && pindahTampilEl) pindahTampilEl.style.display = "";
+        }
+      });
+  }
+  function aktifkanKode() {
+    aktifkanKodeDari(el("kunci-kode"), el("kunci-pesan"), el("btn-pindah-tampil"), el("pindah-bungkus"));
+  }
+  function aktifkanKodePengaturan() {
+    aktifkanKodeDari(el("lisensi-kode"), el("lisensi-pesan"), el("btn-pindah-tampil-pengaturan"), el("lisensi-pindah-bungkus"));
+  }
+  function sembunyikanPindah(tampilEl, bungkusEl) {
+    if (tampilEl) tampilEl.style.display = "none";
+    if (bungkusEl) bungkusEl.style.display = "none";
+  }
+  /* v1.8.1 — pindah lisensi ke perangkat ini: baca kode dari kolom
+     aktivasi yang sama, email dari form pindah. */
+  function tampilkanPindah(tampilEl, bungkusEl, emailInput) {
+    if (tampilEl) tampilEl.style.display = "none";
+    if (bungkusEl) bungkusEl.style.display = "";
+    if (emailInput && emailInput.focus) emailInput.focus();
+  }
+  function pindahPerangkatDari(kodeInput, emailInput, pesanEl) {
+    var kode = kodeInput ? kodeInput.value : "";
+    var email = emailInput ? emailInput.value : "";
+    if (!L.validasiEmail(email)) {
+      if (pesanEl) pesanEl.textContent = "Masukkan email pembeli yang benar.";
+      return;
+    }
+    if (pesanEl) pesanEl.textContent = "Memeriksa...";
+    L.pindahPerangkat(DB_URL, kode, lisensi.deviceId, email,
+      (typeof fetch !== "undefined" ? fetch : null), Date.now())
+      .then(function (hasil) {
+        if (hasil.ok) {
+          lisensi.aktif = true;
+          lisensi.kode = L.normalisasiKode(kode);
+          lisensi.email = null;
+          simpanLisensi();
+          terapkanLisensi();
+          toast("Kode diterima — lisensi pindah ke perangkat ini");
+        } else {
+          var teks = {
+            "belum-diatur": "Pengaturan database belum diisi — hubungi penjual.",
+            "tidak-ditemukan": "Kode tidak ditemukan. Periksa lagi ejaannya.",
+            "kedaluwarsa": "Kode sudah kedaluwarsa (berlaku 30 hari). Hubungi penjual.",
+            "email-tidak-cocok": "Email tidak cocok dengan pembelian kode ini.",
+            "email-salah": "Masukkan email pembeli yang benar.",
+            "tidak-ada-internet": "Tidak ada internet — nyalakan internet sekali untuk aktivasi.",
+            "tidak-bisa-terhubung": "Tidak bisa terhubung ke server — coba lagi.",
+            "server-menolak": "Server menolak — coba lagi.",
             "format-salah": "Format kode salah."
           }[hasil.alasan] || "Kode tidak bisa dipakai.";
           if (pesanEl) pesanEl.textContent = teks;
         }
       });
   }
-  function aktifkanKode() {
-    aktifkanKodeDari(el("kunci-kode"), el("kunci-pesan"));
+  function pindahPerangkatKunci() {
+    pindahPerangkatDari(el("kunci-kode"), el("kunci-pindah-email"), el("kunci-pindah-pesan"));
   }
-  function aktifkanKodePengaturan() {
-    aktifkanKodeDari(el("lisensi-kode"), el("lisensi-pesan"));
+  function pindahPerangkatPengaturan() {
+    pindahPerangkatDari(el("lisensi-kode"), el("lisensi-pindah-email"), el("lisensi-pindah-pesan"));
+  }
+
+  /* v1.8.0 — lupa kode: kirim ulang kode ke email pembeli. Pesan yang
+     tampil SELALU sama ("Bila email ini pernah membeli, kode sudah
+     dikirim.") apapun jawaban server, supaya tidak bocor apakah email
+     itu ada atau tidak; hanya gagal jaringan yang dibedakan. */
+  function tampilkanLupaKode() {
+    var b = el("lupa-kode-bungkus");
+    if (b) b.style.display = "";
+    var inp = el("kunci-lupa-email");
+    if (inp && inp.focus) inp.focus();
+  }
+  function kirimUlangKode() {
+    var inp = el("kunci-lupa-email"), pesan = el("kunci-lupa-pesan");
+    var email = inp ? inp.value : "";
+    if (!L.validasiEmail(email)) {
+      if (pesan) pesan.textContent = "Masukkan email pembeli yang benar.";
+      return;
+    }
+    if (pesan) pesan.textContent = "Mengirim...";
+    L.mintaKirimUlang(WEBHOOK_URL, email, (typeof fetch !== "undefined" ? fetch : null))
+      .then(function (hasil) {
+        if (!pesan) return;
+        if (hasil.ok) { pesan.textContent = "Bila email ini pernah membeli, kode sudah dikirim."; return; }
+        var teks = {
+          "tidak-ada-internet": "Tidak ada internet — nyalakan internet, lalu coba lagi.",
+          "tidak-bisa-terhubung": "Tidak bisa terhubung ke server — coba lagi.",
+          "server-menolak": "Server menolak — coba lagi."
+        }[hasil.alasan] || "Tidak bisa mengirim — coba lagi.";
+        pesan.textContent = teks;
+      });
+  }
+
+  /* v1.8.0 — keluar dari perangkat ini: lepas ikatan di RTDB dulu,
+     baru lisensi lokal dihapus (kembali ke layar sambutan). Data warung
+     (produk, riwayat, kasbon) TIDAK ikut dihapus — hanya lisensi yang
+     dilepas, jadi sesudah masuk lagi semuanya tetap ada. Bila lepas
+     ikatan gagal (offline), lisensi lokal tetap dipertahankan. */
+  function tampilkanModalKeluar() {
+    var u = el("keluar-latar");
+    if (u) u.style.display = "flex";
+  }
+  function tutupModalKeluar() {
+    var u = el("keluar-latar");
+    if (u) u.style.display = "none";
+  }
+  function jalankanKeluar() {
+    tutupModalKeluar();
+    var kode = lisensi && lisensi.kode;
+    if (!kode) { resetLisensiLokal(); return; }
+    L.lepasIkatanKode(DB_URL, kode, (typeof fetch !== "undefined" ? fetch : null))
+      .then(function (hasil) {
+        if (!hasil.ok) {
+          var teks = {
+            "tidak-ada-internet": "Tidak ada internet — coba lagi.",
+            "tidak-bisa-terhubung": "Tidak bisa terhubung ke server — coba lagi.",
+            "server-menolak": "Server menolak — coba lagi."
+          }[hasil.alasan] || "Gagal keluar — coba lagi.";
+          toast(teks);
+          return;
+        }
+        resetLisensiLokal();
+        toast("Sudah keluar — lisensi bisa dipakai di perangkat lain.");
+      });
+  }
+  function resetLisensiLokal() {
+    /* Seperti install baru (layar sambutan tampil), tapi ID perangkat
+       tetap sama dan data warung tetap ada. Trial BISA dimulai lagi —
+       sama seperti pasang ulang hari ini. */
+    var deviceId = lisensi ? lisensi.deviceId : null;
+    lisensi = { installMs: null, aktif: false, kode: null, email: null, deviceId: deviceId || L.buatIdPerangkat(), sambutan: false };
+    simpanLisensi();
+    terapkanLisensi();
+  }
+
+  /* v1.8.0 — cek ulang ikatan lisensi saat aplikasi dibuka (HANYA
+     instalasi berlisensi kode, HANYA bila online, sekali per sesi):
+     bila record di server kini terikat perangkat lain (lisensi pindah
+     / ikat ulang darurat dari perangkat lain), perangkat ini dikunci
+     dan diminta masukkan kode lagi. Diam bila offline / fetch gagal /
+     record tidak ada / deviceId kosong — jangan kunci pengguna karena
+     gangguan jaringan. Pengecekan ditunda 1,5 detik seperti
+     pemberitahuan update. */
+  var lisensiUlangSudah = false;      /* hasil cek sudah diproses sesi ini */
+  var lisensiUlangDijadwalkan = false;
+  function periksaLisensiUlang() {
+    if (lisensiUlangSudah || lisensiUlangDijadwalkan) return;
+    var st = statusLisensiSekarang();
+    if (st.status !== "aktif") return;
+    if (!lisensi.kode) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    lisensiUlangDijadwalkan = true;
+    setTimeout(function () {
+      lisensiUlangSudah = true;
+      L.periksaIkatanKode(DB_URL, lisensi.kode, lisensi.deviceId,
+        (typeof fetch !== "undefined" ? fetch : null))
+        .then(function (hasil) {
+          if (!hasil || !hasil.terkunci) return;
+          lisensi.aktif = false;
+          simpanLisensi();
+          terapkanLisensi();
+          toast("Lisensi sudah pindah ke perangkat lain.");
+        });
+    }, 1500);
   }
 
   /* ---------- foto produk (v1.4) ---------- */
@@ -1619,10 +1946,12 @@
     var h = el("hapus-latar"), d = el("cadangan-latar"), u = el("update-latar");
     var p = el("cetak-pilih-latar");
     var k = el("crop-modal"), q = el("qris-fullscreen");
+    var kl = el("keluar-latar"); /* v1.8.0 — dialog konfirmasi keluar perangkat */
     return (s && s.style.display === "flex") || (c && c.style.display === "flex")
       || (h && h.style.display === "flex") || (d && d.style.display === "flex")
       || (u && u.style.display === "flex") || (p && p.style.display === "flex")
-      || (k && k.style.display === "flex") || (q && q.style.display === "flex");
+      || (k && k.style.display === "flex") || (q && q.style.display === "flex")
+      || (kl && kl.style.display === "flex");
   }
   function tabAktifSekarang() {
     var tabs = ["kasir", "pilih", "produk", "riwayat", "laporan", "pengaturan", "kasbon"];
@@ -1642,6 +1971,7 @@
       if (el("cetak-pilih-latar") && el("cetak-pilih-latar").style.display === "flex") { tutupDialogPilihCetak(); return; }
       if (el("crop-modal") && el("crop-modal").style.display === "flex") { tutupCrop(); return; }
       if (el("qris-fullscreen") && el("qris-fullscreen").style.display === "flex") { tutupQrisFullscreen(); return; }
+      if (el("keluar-latar") && el("keluar-latar").style.display === "flex") { tutupModalKeluar(); return; }
       if (el("cetak-modal")) el("cetak-modal").style.display = "none";
       return;
     }
@@ -3112,10 +3442,26 @@
     /* v1.4 — kunci lisensi */
     el("btn-aktifkan-kode").addEventListener("click", aktifkanKode);
     el("kunci-kode").addEventListener("keydown", function (e) { if (e.key === "Enter") aktifkanKode(); });
+    /* v1.8.1 — pindah ke perangkat ini (layar kunci) */
+    el("btn-pindah-tampil").addEventListener("click", function () { tampilkanPindah(el("btn-pindah-tampil"), el("pindah-bungkus"), el("kunci-pindah-email")); });
+    el("btn-pindah-perangkat").addEventListener("click", pindahPerangkatKunci);
+    el("kunci-pindah-email").addEventListener("keydown", function (e) { if (e.key === "Enter") pindahPerangkatKunci(); });
+    /* v1.8.0 — lupa kode: kirim ulang kode ke email pembeli */
+    el("btn-lupa-kode").addEventListener("click", tampilkanLupaKode);
+    el("btn-kirim-ulang").addEventListener("click", kirimUlangKode);
+    el("kunci-lupa-email").addEventListener("keydown", function (e) { if (e.key === "Enter") kirimUlangKode(); });
     /* v1.7.3 — masukkan kode dari kartu Lisensi di Pengaturan (URL
        database hardcode; kolom URL dihapus atas perintah ARIFIN). */
     el("btn-aktifkan-kode-pengaturan").addEventListener("click", aktifkanKodePengaturan);
     el("lisensi-kode").addEventListener("keydown", function (e) { if (e.key === "Enter") aktifkanKodePengaturan(); });
+    /* v1.8.1 — pindah ke perangkat ini (kartu Lisensi) */
+    el("btn-pindah-tampil-pengaturan").addEventListener("click", function () { tampilkanPindah(el("btn-pindah-tampil-pengaturan"), el("lisensi-pindah-bungkus"), el("lisensi-pindah-email")); });
+    el("btn-pindah-perangkat-pengaturan").addEventListener("click", pindahPerangkatPengaturan);
+    el("lisensi-pindah-email").addEventListener("keydown", function (e) { if (e.key === "Enter") pindahPerangkatPengaturan(); });
+    /* v1.8.0 — keluar dari perangkat ini (hanya bila berlisensi kode) */
+    el("btn-keluar-perangkat").addEventListener("click", tampilkanModalKeluar);
+    el("btn-keluar-ya").addEventListener("click", jalankanKeluar);
+    el("btn-keluar-batal").addEventListener("click", tutupModalKeluar);
     /* v1.7.3 — spanduk masa percobaan bisa diketuk: buka Pengaturan,
        gulir ke kartu Lisensi, fokus ke kolom masukkan kode. */
     el("trial-banner").addEventListener("click", function () {
