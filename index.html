@@ -89,6 +89,11 @@
   .baris-scan { display: flex; gap: 8px; }
   .baris-scan input { flex: 1; }
   .baris-scan button { flex: none; width: auto; padding: 11px 14px; margin-top: 0; font-size: 15px; }
+  /* v1.8.4 — perapian form produk: keterangan kecil, tombol sebaris, simpan nempel */
+  .keterangan { font-size: 12px; color: var(--abu); margin: 2px 2px 0; }
+  .baris-tombol { display: flex; gap: 8px; margin-top: 8px; }
+  .baris-tombol button { flex: 1; margin-top: 0; }
+  .simpan-nempel { position: sticky; bottom: 76px; z-index: 5; }
   #scan-modal { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: rgba(0,0,0,.85); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
   #scan-reader { width: 100%; max-width: 420px; background: #000; border-radius: 12px; overflow: hidden; }
   #scan-reader video { width: 100% !important; }
@@ -162,6 +167,16 @@
   .baris-rekap { display: flex; justify-content: space-between; gap: 8px; padding: 8px 2px; border-bottom: 1px solid var(--garis); font-size: 14px; }
   .baris-rekap:last-child { border-bottom: none; }
   .baris-rekap b { text-align: right; }
+  /* v1.8.3 — baris Rekap Harian bisa diketuk + detail per tanggal */
+  .baris-rekap-tombol { display: flex; width: 100%; background: none; border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .baris-rekap-tombol:active { background: var(--hijau-muda); }
+  .baris-rekap-tombol.terbuka { background: var(--hijau-muda); }
+  .rekap-detail { background: #F9FAFB; border: 1px solid var(--garis); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+  .rekap-detail .ringkas { padding: 5px 0; font-size: 14px; }
+  .baris-metode { display: flex; width: 100%; background: #fff; border: 1px solid var(--garis); border-radius: 10px; padding: 10px 12px; margin: 6px 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .baris-metode:active { background: var(--hijau-muda); }
+  .baris-metode span { flex: 1; }
+  .baris-metode b { text-align: right; }
   .kasbon-total { font-size: 16px; font-weight: 800; color: var(--hijau-tua); }
   /* v1.5 — layar sambutan (tombol besar, kata-kata biasa) */
   #layar-sambutan { display: none; position: fixed; left: 0; right: 0; top: 0; bottom: 0; background: #F3F4F6; z-index: 60; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
@@ -299,7 +314,7 @@
 
   <section id="tab-pilih" class="tab">
     <h2>Pilih Produk — ketuk nama</h2>
-    <input id="cari-pilih" type="search" placeholder="Cari nama merek..." autocomplete="off">
+    <input id="cari-pilih" type="search" placeholder="Cari nama produk..." autocomplete="off">
     <div class="chip-baris" id="pilih-kategori" style="flex-wrap:wrap"></div>
     <div id="grid-pilih"></div>
     <button id="btn-lihat-keranjang" class="btn btn-utama" style="position:sticky;bottom:76px">🛒 Lihat Keranjang</button>
@@ -311,51 +326,56 @@
     <h2>Produk &amp; Stok</h2>
     <div class="kartu">
       <h2 id="f-judul" style="margin-top:0">Tambah Produk</h2>
-      <label for="f-nama">Nama merek</label>
-      <input id="f-nama" type="text" placeholder="cth: Minyak Goreng Curah">
+      <label for="f-nama">Nama produk</label>
+      <input id="f-nama" type="text" placeholder="cth: Gula Pasir 1Kg">
       <div class="form-grid">
-        <div><label for="f-harga">Harga per satuan (Rp)</label><input id="f-harga" type="text" inputmode="numeric" placeholder="cth: 15000"></div>
+        <div><label for="f-harga">Harga (Rp)</label><input id="f-harga" type="text" inputmode="numeric" placeholder="cth: 15000"></div>
         <div><label for="f-satuan">Satuan</label>
           <select id="f-satuan">
-            <option value="Pcs">Pcs (kemasan)</option>
-            <option value="Liter">Liter (curah)</option>
-            <option value="mili">mili (curah)</option>
-            <option value="Dus">Dus (kemasan)</option>
-            <option value="Kg">Kg (curah)</option>
-            <option value="Gram">Gram (curah)</option>
-            <option value="Bungkus">Bungkus (kemasan)</option>
-            <option value="Sachet">Sachet (kemasan)</option>
-            <option value="Renteng">Renteng (kemasan)</option>
-            <option value="Botol">Botol (kemasan)</option>
-            <option value="Butir">Butir (kemasan)</option>
-            <option value="Tabung">Tabung (kemasan)</option>
+            <option value="Pcs">Pcs</option>
+            <option value="Liter">Liter</option>
+            <option value="mili">mili</option>
+            <option value="Dus">Dus</option>
+            <option value="Kg">Kg</option>
+            <option value="Gram">Gram</option>
+            <option value="Bungkus">Bungkus</option>
+            <option value="Sachet">Sachet</option>
+            <option value="Renteng">Renteng</option>
+            <option value="Botol">Botol</option>
+            <option value="Butir">Butir</option>
+            <option value="Tabung">Tabung</option>
           </select>
         </div>
       </div>
       <!-- v1.6 — Modal/HPP keluar dari "Lanjutan (opsional)": langsung terlihat di form utama -->
-      <label for="f-hpp">Modal / HPP per satuan (Rp) — isi bila mau laporan laba</label>
+      <label for="f-hpp">Modal / HPP (Rp)</label>
       <input id="f-hpp" type="text" inputmode="numeric" placeholder="cth: 12000">
+      <p class="keterangan">Isi kalau mau laporan laba.</p>
+      <!-- v1.8.4 — Stok keluar dari "Lanjutan (opsional)" supaya kelihatan langsung saat ubah produk -->
+      <label for="f-stok">Stok (kosong = tidak dibatasi)</label>
+      <input id="f-stok" type="number" min="0" step="any" inputmode="decimal" placeholder="cth: 50">
       <label for="f-barcode">Barcode (opsional — satu produk boleh banyak barcode)</label>
       <div id="f-barcode-chips" style="margin:4px 0 8px"></div>
-      <div class="baris-scan"><input id="f-barcode" type="text" placeholder="cth: 899123456001">
-      <button id="btn-tambah-barcode" type="button" class="btn btn-garis">＋ Tambah</button>
+      <input id="f-barcode" type="text" placeholder="cth: 899123456001">
+      <div class="baris-tombol"><button id="btn-tambah-barcode" type="button" class="btn btn-garis">＋ Tambah</button>
       <button id="btn-scan-barcode" type="button" class="btn btn-garis">📷 Scan</button></div>
-      <button id="btn-buat-kode-internal" type="button" class="btn btn-garis" style="font-size:14px">🏷️ Buat Kode Internal (KSR-0001) — untuk produk tanpa barcode kemasan</button>
+      <button id="btn-buat-kode-internal" type="button" class="btn btn-garis" style="font-size:14px">🏷️ Buat Kode Internal (KSR-0001)</button>
+      <p class="keterangan">Untuk produk tanpa barcode kemasan</p>
       <label for="f-foto">Foto produk (opsional — dari kamera/galeri, diperkecil otomatis)</label>
-      <div class="baris-scan"><input id="f-foto" type="file" accept="image/*" capture="environment">
+      <input id="f-foto" type="file" accept="image/*" capture="environment" style="display:none">
+      <div class="baris-tombol"><button id="btn-pilih-foto" type="button" class="btn btn-garis">📷 Pilih Foto</button>
       <button id="btn-hapus-foto" type="button" class="btn btn-garis">Hapus Foto</button></div>
+      <p class="keterangan" id="f-foto-nama">Belum ada foto</p>
       <div id="f-foto-pratinjau"></div>
       <details class="lanjutan">
         <summary>Lanjutan (opsional)</summary>
         <label for="f-kategori">Kategori</label>
         <input id="f-kategori" type="text" placeholder="Sembako">
-        <label for="f-stok">Stok (kosong = tidak dibatasi)</label>
-        <input id="f-stok" type="number" min="0" step="any" inputmode="decimal" placeholder="cth: 50">
         <label for="f-minstok">Ingatkan kalau stok tinggal ... (batas menipis)</label>
         <input id="f-minstok" type="number" min="0" step="1" inputmode="numeric" placeholder="cth: 5">
       </details>
-      <button id="btn-simpan-produk" class="btn btn-utama">Simpan Produk</button>
-      <button id="btn-batal-edit" class="btn btn-garis" style="display:none">Batal Ubah</button>
+      <div class="simpan-nempel"><button id="btn-simpan-produk" class="btn btn-utama">Simpan Produk</button>
+      <button id="btn-batal-edit" class="btn btn-garis" style="display:none">Batal Ubah</button></div>
     </div>
     <div id="daftar-produk-penuh"></div>
   </section>
@@ -388,6 +408,7 @@
 
   <section id="tab-laporan" class="tab">
     <h2>Laporan</h2>
+    <div id="lap-utama">
     <div class="stat">
       <div class="kartu"><div class="judul">Omset hari ini</div><div class="angka" id="lap-omset">Rp0</div></div>
       <div class="kartu"><div class="judul">Laba kotor hari ini</div><div class="angka" id="lap-laba">—</div></div>
@@ -404,10 +425,20 @@
     </div>
     <div class="kartu">
       <h2 style="margin-top:0">Rekap Harian</h2>
-      <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Omset, laba, dan jumlah transaksi tiap tanggal — terbaru dulu.</p>
+      <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Omset, laba, dan jumlah transaksi tiap tanggal — terbaru dulu. Ketuk tanggal untuk melihat rinciannya.</p>
       <div id="lap-rekap"></div>
     </div>
-    <p class="catatan">KasirKu v1.8.2 — semua data tersimpan di perangkat ini saja.</p>
+    <p class="catatan">KasirKu v1.8.4 — semua data tersimpan di perangkat ini saja.</p>
+    </div>
+    <!-- v1.8.3 — tampilan Tunai/QRIS satu hari (di dalam tab Laporan) -->
+    <div id="lap-metode-detail" style="display:none">
+      <button id="btn-metode-kembali" class="btn btn-garis" style="margin-top:0">← Kembali</button>
+      <div class="kartu" style="margin-top:12px">
+        <h2 style="margin-top:0" id="metode-judul">Tunai</h2>
+        <p style="font-size:14px;color:var(--abu)" id="metode-ringkas"></p>
+        <div id="metode-daftar"></div>
+      </div>
+    </div>
   </section>
 
   <section id="tab-pengaturan" class="tab">
@@ -469,10 +500,13 @@
       <p class="catatan" style="text-align:left">Pilihan tersimpan di perangkat dan berlaku untuk semua halaman.</p>
     </div>
     <div class="kartu">
+      <h2 style="margin-top:0">Hapus Semua Data</h2>
+      <p style="font-size:14px;color:var(--abu)">Hapus semua produk, transaksi, dan kasbon — misalnya data uji coba. Lisensi, gambar QRIS, dan printer tetap tersimpan.</p>
+      <button id="btn-hapus-data" class="btn btn-bahaya">🗑️ Hapus Semua Data</button>
+    </div>
+    <div class="kartu">
       <h2 style="margin-top:0">Tentang KasirKu</h2>
-      <p style="font-size:14px;color:var(--abu)">Versi 1.8.2 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
-      <p style="font-size:14px;color:var(--abu)">Suka dengan versi web ini? Unduh aplikasi Android-nya supaya bisa dipakai di HP, tetap offline dan datanya tersimpan di HP sendiri.</p>
-      <a id="unduh-android" href="https://lynk.id/immangarif/4dvo1rqp7r3v" target="_blank" rel="noopener" style="display:block;padding:12px;border-radius:12px;background:var(--hijau);color:#fff;font-size:15px;font-weight:700;text-decoration:none;text-align:center">⬇️ Unduh Aplikasi Android</a>
+      <p style="font-size:14px;color:var(--abu)">Versi 1.8.4 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
     </div>
   </section>
 </main>

@@ -1,4 +1,27 @@
-/* KasirKu v1.8.2 — logika kasir toko lokal (web standar murni).
+/* KasirKu v1.8.4 — logika kasir toko lokal (web standar murni).
+   v1.8.4 (26 Nov 2026): FORM PRODUK DIRAPIKAN — (1) label "Nama merek"
+   -> "Nama produk" (termasuk placeholder cari + toast). (2) Opsi satuan
+   dipendekkan ("Pcs", "Liter", ...) supaya tidak terpotong; label harga
+   jadi "Harga (Rp)". (3) Tombol "Simpan Produk" nempel di bawah layar
+   (sticky, satu wadah dengan "Batal Ubah"). (4) Input barcode selebar
+   layar, tombol Tambah + Scan di baris bawahnya. (5) Label Modal/HPP
+   dipendekkan + keterangan kecil; tombol Kode Internal dipendekkan +
+   keterangan kecil. (6) Input file foto disembunyikan, diganti tombol
+   "📷 Pilih Foto" + nama berkas tampil utuh. (7) Stok keluar dari
+   "Lanjutan (opsional)" ke form utama.
+   v1.8.3 (26 Nov 2026): LAPORAN RAPI — (1) Produk Terlaris digabung per
+   NAMA (bukan id): dua record "aqua 2 liter" harga beda jadi satu baris
+   (qty + total dijumlah, nama tampil ejaan asli pertama). (2) Rekap
+   Harian bisa diketuk: detail hari itu terbuka tepat di bawah barisnya
+   (omset, laba, transaksi, Tunai, QRIS, produk terjual hari itu —
+   digabung per nama); satu tanggal terbuka dalam satu waktu. (3) Tunai
+   & QRIS di detail hari itu bisa diketuk, masing-masing membuka tampilan
+   sendiri berisi daftar transaksi hari itu untuk metode tersebut (jam,
+   item, total) + tombol "← Kembali". (4) Tanggal tampil rapi
+   ("26 Nov 2026", bulan Indonesia). (5) Pengaturan: tombol "Hapus Semua
+   Data" — hapus produk + transaksi + kasbon + terhapus (dikosingkan,
+   BUKAN removeItem, supaya produk contoh tidak muncul lagi saat buka
+   berikutnya); lisensi, QRIS, printer, ukuran huruf TIDAK disentuh.
    v1.8.2 (26 Nov 2026): BUNYI BEEP SCAN — saat scan barcode kasir berhasil dan produk ditemukan, aplikasi membunyikan satu beep pendek (~100 ms, 1500 Hz, WebAudio tanpa berkas, jalan offline); barcode yang tidak dikenal TIDAK dibunyikan supaya dari bunyinya ketahuan ada yang tidak beres. Konteks audio disiapkan di bukaScan() (ketuk tombol Scan = gestur pengguna) karena WebView bawaan menuntut gestur sebelum audio boleh berbunyi. Getar yang sudah ada tidak diubah. ANIMASI STOK HABIS — tile produk yang stoknya habis (terbatas dan = 0) berdenyut merah pelan (class habis, 1,2 dtk sekali); ketuk produk habis menampilkan "Stok habis" dan tidak masuk keranjang; stok menipis tetap merah polos tanpa kedip (kedip = habis, merah polos = menipis); produk tanpa batas stok tidak berkedip.
    v1.8.1 (25 Nov 2026): (1) AKTIVASI KODE SAJA — kolom email DIHAPUS dari semua tempat aktivasi (layar kunci, kartu Lisensi); aktivasi hanya butuh kode seperti dulu (perintah ARIFIN 21:15 WITA: v1.8.0 "terlalu ribet"). Email HANYA diminta di dua tempat: "Lupa kode?" (kirim ulang kode) dan "Pindah ke perangkat ini" (bila kode sudah dipakai perangkat lain + email cocok -> ikat ulang; record lama tanpa email menerima email yang dimasukkan). (2) PESAN GALAT JUJUR — fetch yang ditolak hanya disebut "tidak ada internet" bila navigator.onLine === false; bila internet menyala tapi fetch gagal -> "Tidak bisa terhubung ke server"; bila server menjawab dengan status bukan 2xx (mis. rules menolak tulis -> permission denied) -> "Server menolak, coba lagi". Berlaku di aktivasi, pindah perangkat, kirim ulang, dan keluar.
    v1.7.8 (25 Nov 2026): (1) CROP PERSEGI — satu pemotong untuk foto
@@ -593,23 +616,85 @@
     return urutan.map(function (k) { return map[k]; });
   }
 
+  /* v1.8.3 — format tanggal rapi untuk tampilan: "2026-11-26" ->
+     "26 Nov 2026" (bulan Indonesia). Internal tetap YYYY-MM-DD.
+     Bila bukan pola tanggal, kembalikan apa adanya (jangan crash). */
+  var BULAN_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  function formatTanggalRapi(iso) {
+    var s = String(iso == null ? "" : iso);
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return s;
+    var bln = BULAN_ID[parseInt(m[2], 10) - 1];
+    if (!bln) return s;
+    return parseInt(m[3], 10) + " " + bln + " " + m[1];
+  }
+
+  /* v1.8.3 — nama produk dinormalisasi untuk pengelompokan: buang spasi
+     ujung + huruf kecil semua. "Aqua 2 Liter" dan " aqua 2 liter "
+     dianggap produk yang sama. */
+  function normalisasiNamaProduk(nama) {
+    return String(nama == null ? "" : nama).trim().toLowerCase();
+  }
+
+  /* v1.8.3 — gabung daftar item (datar) per nama produk yang
+     dinormalisasi: qty dijumlah, total (harga x qty) dijumlah. Nama
+     tampil memakai ejaan asli (di-trim) yang pertama ditemui. Urutan =
+     pertama kali nama muncul. */
+  function gabungProdukItems(items) {
+    var map = {}, urutan = [];
+    (items || []).forEach(function (it) {
+      var namaAsli = String((it && it.nama) || "?").trim() || "?";
+      var k = normalisasiNamaProduk(namaAsli);
+      if (!map[k]) { map[k] = { nama: namaAsli, qty: 0, total: 0 }; urutan.push(k); }
+      map[k].qty = Math.round((map[k].qty + angka(it.qty)) * 100) / 100;
+      map[k].total += angka(it.harga) * angka(it.qty);
+    });
+    return urutan.map(function (k) { return map[k]; });
+  }
+
+  /* v1.8.3 — transaksi hari + metode: "qris" hanya yang metodenya qris;
+     "tunai" = tunai + transaksi lama tanpa field metode (bawaan tunai). */
+  function transaksiMetode(txns, tanggal, metode) {
+    var mauQris = metode === "qris";
+    return (txns || []).filter(function (t) {
+      if (!t || t.tanggal !== tanggal) return false;
+      return mauQris ? t.metode === "qris" : t.metode !== "qris";
+    });
+  }
+
+  /* v1.8.3 — jam transaksi "HH:MM" dari id TRX-<ms>; bila id tidak ada,
+     coba baca dari teks waktu ("26/11/2026, 17.45.00" -> "17:45");
+     bila tidak ketemu, "—". */
+  function jamTransaksi(t) {
+    var ms = parseInt(String((t && t.id) || "").slice(4), 10);
+    if (!isNaN(ms) && ms > 0) {
+      var d = new Date(ms);
+      var j = d.getHours(), m = d.getMinutes();
+      return (j < 10 ? "0" : "") + j + ":" + (m < 10 ? "0" : "") + m;
+    }
+    var w = String((t && t.waktu) || "");
+    var c = w.match(/(\d{1,2})[:.](\d{2})/);
+    if (c) {
+      var jj = parseInt(c[1], 10);
+      return (jj < 10 ? "0" : "") + jj + ":" + c[2];
+    }
+    return "—";
+  }
+
   /* v1.5 — Produk Terlaris: jumlah terjual per produk di seluruh
      transaksi, urut terbanyak dulu, maksimal 5 produk. Kalau baru 2
      produk yang pernah terjual, tampilkan 2 saja — tanpa slot kosong.
-     Periode: sepanjang waktu (paling sederhana dan konsisten). */
+     Periode: sepanjang waktu (paling sederhana dan konsisten).
+     v1.8.3 — digabung per NAMA yang dinormalisasi (bukan id): dua
+     record "aqua 2 liter" harga beda jadi satu baris. */
   var TERLARIS_MAKS = 5;
   function produkTerlaris(txns, maks) {
     var m = (maks == null) ? TERLARIS_MAKS : Math.max(0, Math.floor(maks));
-    var map = {}, urutan = [];
+    var semuaItem = [];
     (txns || []).forEach(function (t) {
-      (t.items || []).forEach(function (it) {
-        var k = it.id || it.nama || "?";
-        if (!map[k]) { map[k] = { id: it.id || null, nama: it.nama || "?", qty: 0, total: 0 }; urutan.push(k); }
-        map[k].qty = Math.round((map[k].qty + angka(it.qty)) * 100) / 100;
-        map[k].total += angka(it.harga) * angka(it.qty);
-      });
+      (t.items || []).forEach(function (it) { semuaItem.push(it); });
     });
-    var daftar = urutan.map(function (k) { return map[k]; });
+    var daftar = gabungProdukItems(semuaItem);
     daftar.sort(function (a, b) {
       if (b.qty !== a.qty) return b.qty - a.qty;
       return a.nama < b.nama ? -1 : a.nama > b.nama ? 1 : 0;
@@ -1057,7 +1142,7 @@
      TANPA ?auth=, TANPA secret (secret TIDAK PERNAH masuk aplikasi).
      Mengembalikan Promise berisi isi node {versi, vc, tautan} atau
      null bila node tidak ada / fetch gagal / tidak ada internet. */
-  var VERSI_KODE = 25;   /* HARUS sama dengan versionCode AndroidManifest */
+  var VERSI_KODE = 27;   /* HARUS sama dengan versionCode AndroidManifest */
   var LINK_UPDATE = "https://lynk.id/immangarif/4dvo1rqp7r3v"; /* listing gratis */
   var KEY_UPDATE_TERAKHIR = "kasirku_update_terakhir_v1"; /* tanggal YYYY-MM-DD terakhir dialog tampil */
   function bacaInfoVersi(dbUrl, fetchFn) {
@@ -1084,6 +1169,29 @@
      tanggal; lunas ditandai beserta tanggal lunas. Disimpan di
      localStorage terpisah, ikut masuk file backup JSON. */
   var KEY_KASBON = "kasirku_kasbon_v1";
+
+  /* v1.8.3 — kunci yang dihapus tombol "Hapus Semua Data" (data uji
+     coba): produk, transaksi, kasbon, terhapus. SENGAJA TIDAK ADA
+     kasirku_lisensi_v1, kasirku_qris_v1, kasirku_printer_v1,
+     kasirku_huruf_v1, kasirku_update_terakhir_v1, kunci cadangan.
+     Didefinisikan DI SINI (sesudah KEY_KASBON) supaya nilainya sudah
+     terisi — bila didefinisikan lebih awal, KEY_KASBON masih undefined. */
+  var KUNCI_DATA_UJI = [KEY_PRODUK, KEY_TRX, KEY_KASBON, KEY_TERHAPUS];
+  /* Kosongkan keempat kunci ("[]") dan kembalikan daftar kunci yang
+     dikosongkan. DIKOSONGKAN, bukan removeItem: bila kunci produk
+     dihapus, muat() menganggap install baru dan produk contoh muncul
+     lagi — padahal pengguna mau mulai bersih. Storage di luar daftar
+     tidak disentuh. */
+  function hapusDataUji(storage) {
+    var kosong = [];
+    if (!storage) return kosong;
+    KUNCI_DATA_UJI.forEach(function (k) {
+      try { storage.setItem(k, "[]"); kosong.push(k); }
+      catch (e) { /* diam — storage penuh/rusak: jangan gagalkan */ }
+    });
+    return kosong;
+  }
+
   function buatKasbon(nama, jumlah, keterangan, sekarang) {
     nama = String(nama == null ? "" : nama).trim();
     var j = angka(jumlah, 0);
@@ -1246,6 +1354,14 @@
     stokMenipis: stokMenipis,
     TERLARIS_MAKS: TERLARIS_MAKS, produkTerlaris: produkTerlaris,
     rekapHarian: rekapHarian, kelompokRiwayat: kelompokRiwayat,
+    /* v1.8.3 — laporan rapi: gabung per nama, tanggal rapi, detail
+       metode, jam transaksi, hapus data uji coba */
+    formatTanggalRapi: formatTanggalRapi,
+    normalisasiNamaProduk: normalisasiNamaProduk,
+    gabungProdukItems: gabungProdukItems,
+    transaksiMetode: transaksiMetode, jamTransaksi: jamTransaksi,
+    KUNCI_DATA_UJI: KUNCI_DATA_UJI, hapusDataUji: hapusDataUji,
+    KEY_PRODUK: KEY_PRODUK, KEY_TRX: KEY_TRX,
     /* v1.5 — kasbon + backup + rekap CSV */
     KEY_KASBON: KEY_KASBON,
     buatKasbon: buatKasbon, tambahKasbon: tambahKasbon,
@@ -1309,6 +1425,7 @@
   var EMAIL_PENGEMBANG = "arifinskansal@gmail.com";
   var LINK_BELI_KODE = "https://lynk.id/immangarif/gz5eplyzomoo"; /* v1.7.2 — langsung ke listing kode */
   var formFoto = null;      // data URL foto produk yang sedang diisi di form
+  var formFotoNama = null;  // nama berkas foto yang dipilih di form (v1.8.4)
 
   function muatLisensi() {
     try { lisensi = JSON.parse(localStorage.getItem(KEY_LISENSI) || "null"); } catch (e) { lisensi = null; }
@@ -1651,6 +1768,9 @@
     b.innerHTML = formFoto
       ? '<img src="' + formFoto + '" alt="Foto produk" style="max-width:120px;border-radius:10px;display:block;margin-top:6px">'
       : "";
+    /* v1.8.4 — nama berkas tampil utuh di bawah tombol Pilih Foto. */
+    var n = el("f-foto-nama");
+    if (n) n.textContent = formFoto ? (formFotoNama || "Foto tersimpan") : "Belum ada foto";
   }
 
   /* ---------- gambar QRIS warung (v1.7.7; v1.7.8: disimpan PNG) ----------
@@ -1955,7 +2075,7 @@
     if (nama === "pilih") renderPilih();
     if (nama === "produk") renderProduk();
     if (nama === "riwayat") { riwayatBatas = RIWAYAT_TAMPIL_AWAL; renderRiwayat(); }
-    if (nama === "laporan") renderLaporan();
+    if (nama === "laporan") { tutupDetailMetode(); renderLaporan(); }
     if (nama === "kasbon") renderKasbon();
   }
 
@@ -1998,6 +2118,9 @@
     return "kasir";
   }
   function tanganiTombolKembali() {
+    /* v1.8.3 — tampilan Tunai/QRIS terbuka: tombol kembali menutupnya
+       dulu (kembali ke Laporan), bukan ke Kasir. */
+    if (metodeLihat) { tutupDetailMetode(); return; }
     var putusan = L.keputusanKembali(tabAktifSekarang(), modalTerbuka());
     if (putusan === "tutup-modal") {
       if (el("scan-modal") && el("scan-modal").style.display === "flex") { tutupScan(); return; }
@@ -2376,6 +2499,7 @@
     formBarcodes = p ? L.barcodes(p) : [];
     renderBarcodeChips();
     formFoto = p ? (p.foto || null) : null;
+    formFotoNama = null; /* v1.8.4 — foto lama tampil sebagai "Foto tersimpan" */
     var inputFoto = el("f-foto");
     if (inputFoto) inputFoto.value = "";
     tampilkanPratinjauFoto();
@@ -2432,7 +2556,7 @@
     var harga = L.bacaUang(el("f-harga").value);
     var stokRaw = el("f-stok").value.trim();
     var hppRaw = el("f-hpp").value.trim();
-    if (!nama) { toast("Nama merek wajib diisi"); return; }
+    if (!nama) { toast("Nama produk wajib diisi"); return; }
     if (harga <= 0) { toast("Harga per satuan harus lebih dari 0"); return; }
     var stok = stokRaw === "" ? null : L.angka(stokRaw);
     var hpp = hppRaw === "" ? 0 : L.bacaUang(hppRaw);
@@ -2676,7 +2800,7 @@
     isiForm(null);
     formBarcodes = [kode];
     renderBarcodeChips();
-    toast("Barcode " + kode + " sudah terisi — isi nama merek, harga, lalu simpan");
+    toast("Barcode " + kode + " sudah terisi — isi nama produk, harga, lalu simpan");
     setTimeout(function () { el("f-nama").focus(); }, 300);
   }
 
@@ -3351,6 +3475,106 @@
   root.printerAda = printerAda;
 
   /* ---------- laporan ---------- */
+  /* v1.8.3 — keadaan tampilan Laporan: tanggal yang detailnya sedang
+     terbuka (null = tidak ada), dan tampilan metode yang sedang dibuka
+     ({tanggal, metode} atau null). */
+  var rekapTerbuka = null;
+  var metodeLihat = null;
+
+  /* v1.8.3 — isi detail satu tanggal: ringkasan hari + Tunai/QRIS yang
+     bisa diketuk + produk terjual hari itu (digabung per nama). */
+  function htmlDetailHari(r) {
+    var met = L.ringkasanMetode(txns, r.tanggal);
+    var hari = txns.filter(function (t) { return t.tanggal === r.tanggal; });
+    var produkHari = L.produkTerlaris(hari, 999);
+    var s = '<div class="rekap-detail">';
+    s += '<div class="ringkas"><span>Omset</span><b>' + L.rupiah(r.omset) + "</b></div>";
+    if (r.labaAda) s += '<div class="ringkas"><span>Laba</span><b>' + L.rupiah(r.laba) + "</b></div>";
+    s += '<div class="ringkas"><span>Transaksi</span><b>' + r.jumlah + " transaksi</b></div>";
+    s += '<button type="button" class="baris-metode" data-metode="tunai" data-tanggal="' + esc(r.tanggal) + '"><span>💵 Tunai • ' + met.tunaiJumlah + ' transaksi</span><b>' + L.rupiah(met.tunaiOmset) + "</b></button>";
+    s += '<button type="button" class="baris-metode" data-metode="qris" data-tanggal="' + esc(r.tanggal) + '"><span>📱 QRIS • ' + met.qrisJumlah + ' transaksi</span><b>' + L.rupiah(met.qrisOmset) + "</b></button>";
+    s += '<div class="grid-judul" style="margin:10px 2px 4px">Produk terjual hari itu</div>';
+    s += produkHari.length
+      ? produkHari.map(function (p) {
+          return '<div class="baris-rekap"><span>' + esc(p.nama) + "</span><b>" + L.formatQty(p.qty) + " terjual • " + L.rupiah(p.total) + "</b></div>";
+        }).join("")
+      : '<p class="kosong">Belum ada yang terjual.</p>';
+    s += "</div>";
+    return s;
+  }
+
+  /* v1.8.3 — pasang ketukan sesudah #lap-rekap dirender ulang (innerHTML
+     membuat ulang tombol, jadi kabel dipasang tiap render). */
+  function pasangKlikRekap(wadah) {
+    var tombol = wadah.querySelectorAll(".baris-rekap-tombol");
+    for (var i = 0; i < tombol.length; i++) {
+      tombol[i].addEventListener("click", function () {
+        var tgl = this.getAttribute("data-tanggal");
+        rekapTerbuka = (rekapTerbuka === tgl) ? null : tgl;
+        renderLaporan();
+      });
+    }
+    var metode = wadah.querySelectorAll(".baris-metode");
+    for (var j = 0; j < metode.length; j++) {
+      metode[j].addEventListener("click", function () {
+        tampilkanDetailMetode(this.getAttribute("data-tanggal"), this.getAttribute("data-metode"));
+      });
+    }
+  }
+
+  /* v1.8.3 — tampilan Tunai/QRIS satu hari: ganti isi tab Laporan
+     dengan daftar transaksi metode itu (bukan tab baru). */
+  function tampilkanDetailMetode(tanggal, metode) {
+    metodeLihat = { tanggal: tanggal, metode: metode === "qris" ? "qris" : "tunai" };
+    renderDetailMetode();
+    var utama = el("lap-utama"), detail = el("lap-metode-detail");
+    if (utama) utama.style.display = "none";
+    if (detail) detail.style.display = "block";
+  }
+  function tutupDetailMetode() {
+    metodeLihat = null;
+    var utama = el("lap-utama"), detail = el("lap-metode-detail");
+    if (utama) utama.style.display = "";
+    if (detail) detail.style.display = "none";
+  }
+  function renderDetailMetode() {
+    if (!metodeLihat) return;
+    var daftar = L.transaksiMetode(txns, metodeLihat.tanggal, metodeLihat.metode);
+    var total = 0;
+    daftar.forEach(function (t) { total += L.angka(t.total); });
+    var label = metodeLihat.metode === "qris" ? "📱 QRIS" : "💵 Tunai";
+    var judul = el("metode-judul");
+    if (judul) judul.textContent = label + " — " + L.formatTanggalRapi(metodeLihat.tanggal);
+    var ringkas = el("metode-ringkas");
+    if (ringkas) ringkas.textContent = daftar.length + " transaksi • " + L.rupiah(total);
+    var wadah = el("metode-daftar");
+    if (wadah) {
+      wadah.innerHTML = daftar.length
+        ? daftar.map(function (t) {
+            var item = (t.items || []).map(function (it) {
+              return esc(it.nama) + " ×" + L.formatQty(it.qty);
+            }).join(", ");
+            return '<div class="baris-rekap"><span>' + esc(L.jamTransaksi(t)) + " • " + (item || "—") + "</span><b>" + L.rupiah(t.total) + "</b></div>";
+          }).join("")
+        : '<p class="kosong">Belum ada transaksi.</p>';
+    }
+  }
+
+  /* v1.8.3 — hapus semua data uji coba (Pengaturan): tanya dulu, lalu
+     kosongkan produk + transaksi + kasbon + terhapus. Lisensi, QRIS,
+     printer, ukuran huruf TIDAK disentuh. */
+  function hapusSemuaData() {
+    dialogTanya("Hapus semua produk, transaksi, dan kasbon?").then(function (ya) {
+      if (!ya) return;
+      L.hapusDataUji(localStorage);
+      products = []; txns = []; kasbon = []; terhapus = []; cart = [];
+      rekapTerbuka = null; tutupDetailMetode();
+      riwayatBatas = RIWAYAT_TAMPIL_AWAL;
+      renderKasir(); renderPilih(); renderProduk(); renderRiwayat(); renderLaporan(); renderKasbon();
+      toast("Data dihapus");
+    });
+  }
+
   function renderLaporan() {
     var hariIni = L.ringkasan(txns, L.tanggalHariIni());
     var semua = { omset: 0, laba: 0, jumlah: txns.length, labaAda: false };
@@ -3387,13 +3611,24 @@
     var rekap = L.rekapHarian(txns);
     var wadahR = el("lap-rekap");
     if (wadahR) {
-      wadahR.innerHTML = rekap.length
-        ? rekap.map(function (r) {
-            return '<div class="baris-rekap"><span>📅 ' + esc(r.tanggal) + " • " + r.jumlah + ' transaksi</span><b>'
-              + L.rupiah(r.omset) + (r.labaAda ? " • Laba " + L.rupiah(r.laba) : "") + "</b></div>";
-          }).join("")
-        : '<p class="kosong">Belum ada transaksi.</p>';
+      /* v1.8.3 — baris tanggal bisa diketuk: detail hari itu terbuka
+         tepat di bawah barisnya; satu tanggal terbuka dalam satu waktu;
+         ketuk lagi menutup. Tanggal tampil rapi ("26 Nov 2026"). */
+      if (!rekap.length) {
+        wadahR.innerHTML = '<p class="kosong">Belum ada transaksi.</p>';
+      } else {
+        wadahR.innerHTML = rekap.map(function (r) {
+          var buka = rekapTerbuka === r.tanggal;
+          var baris = '<button type="button" class="baris-rekap baris-rekap-tombol' + (buka ? " terbuka" : "")
+            + '" data-tanggal="' + esc(r.tanggal) + '"><span>📅 ' + esc(L.formatTanggalRapi(r.tanggal)) + " • " + r.jumlah + ' transaksi</span><b>'
+            + L.rupiah(r.omset) + (r.labaAda ? " • Laba " + L.rupiah(r.laba) : "") + "</b><span>" + (buka ? "⌄" : "›") + "</span></button>";
+          if (buka) baris += htmlDetailHari(r);
+          return baris;
+        }).join("");
+        pasangKlikRekap(wadahR);
+      }
     }
+    if (metodeLihat) renderDetailMetode();
   }
 
   /* ---------- mulai ---------- */
@@ -3482,9 +3717,15 @@
     el("btn-simpan-produk").addEventListener("click", simpanProdukForm);
     el("btn-batal-edit").addEventListener("click", function () { editId = null; isiForm(null); });
     /* v1.4 — foto produk */
-    el("f-foto").addEventListener("change", function () { bacaFoto(this.files && this.files[0]); });
+    /* v1.8.4 — tombol Pilih Foto memicu input file yang disembunyikan. */
+    el("btn-pilih-foto").addEventListener("click", function () { el("f-foto").click(); });
+    el("f-foto").addEventListener("change", function () {
+      formFotoNama = (this.files && this.files[0]) ? this.files[0].name : null;
+      bacaFoto(this.files && this.files[0]);
+    });
     el("btn-hapus-foto").addEventListener("click", function () {
       formFoto = null;
+      formFotoNama = null; /* v1.8.4 */
       el("f-foto").value = "";
       tampilkanPratinjauFoto();
     });
@@ -3558,6 +3799,9 @@
     /* v1.7.4 — pemberitahuan update (dialog "Ada versi baru") */
     el("btn-update-unduh").addEventListener("click", function () { var t = updateTautan; tutupDialogUpdate(); if (t) bukaTautanLuar(t); });
     el("btn-update-nanti").addEventListener("click", tutupDialogUpdate);
+    /* v1.8.3 — tampilan Tunai/QRIS: tombol kembali + hapus semua data */
+    el("btn-metode-kembali").addEventListener("click", tutupDetailMetode);
+    el("btn-hapus-data").addEventListener("click", hapusSemuaData);
     /* v1.7.5 — pilihan cetak eksplisit (PDF vs Printer Bluetooth) */
     el("btn-cetak-pilih-pdf").addEventListener("click", cetakPilihPdf);
     el("btn-cetak-pilih-bt").addEventListener("click", cetakPilihBluetooth);
