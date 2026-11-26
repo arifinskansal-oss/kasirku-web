@@ -63,6 +63,7 @@
   .pk-info b { display: block; font-size: 15px; }
   .pk-info span { display: block; font-size: 13px; color: var(--abu); margin-top: 2px; }
   .pk-stok.menipis { color: var(--merah); font-weight: 700; }
+  .pk-stok.habis { color: var(--merah); font-weight: 700; animation: denyutHabis 1.2s ease-in-out infinite; }
   .pk-aksi { display: flex; flex-direction: column; gap: 6px; flex: none; }
   .pk-aksi button { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--garis); background: #fff; font-size: 13px; cursor: pointer; }
   .pk-aksi button.hapus { color: var(--merah); }
@@ -123,7 +124,10 @@
   .grid-pilih { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .tile { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--garis); border-radius: 12px; padding: 12px; cursor: pointer; min-height: 76px; }
   .tile:active { background: var(--hijau-muda); }
-  .tile.habis { opacity: .55; }
+  /* v1.8.2 — tile stok habis berdenyut merah PELAN (1,2 dtk sekali, lembut, infinite). */
+  @keyframes denyutHabis { 0%, 100% { border-color: #DC2626; opacity: 1; } 50% { border-color: rgba(220, 38, 38, .35); opacity: .7; } }
+  .tile.habis { border: 2px solid var(--merah); animation: denyutHabis 1.2s ease-in-out infinite; }
+  .tile.habis .tile-stok { color: var(--merah); font-weight: 700; }
   .tile-nama { display: block; font-weight: 700; font-size: 15px; }
   .tile-harga { display: block; color: var(--hijau-tua); font-weight: 700; margin-top: 4px; font-size: 14px; }
   .tile-stok { display: block; font-size: 12px; color: var(--abu); margin-top: 2px; }
@@ -403,7 +407,7 @@
       <p style="font-size:13px;color:var(--abu);margin-bottom:6px">Omset, laba, dan jumlah transaksi tiap tanggal — terbaru dulu.</p>
       <div id="lap-rekap"></div>
     </div>
-    <p class="catatan">KasirKu v1.8.1 — semua data tersimpan di perangkat ini saja.</p>
+    <p class="catatan">KasirKu v1.8.2 — semua data tersimpan di perangkat ini saja.</p>
   </section>
 
   <section id="tab-pengaturan" class="tab">
@@ -466,7 +470,7 @@
     </div>
     <div class="kartu">
       <h2 style="margin-top:0">Tentang KasirKu</h2>
-      <p style="font-size:14px;color:var(--abu)">Versi 1.8.1 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
+      <p style="font-size:14px;color:var(--abu)">Versi 1.8.2 — Kasir toko offline: scan barcode atau ketuk nama produk, total terhitung otomatis, struk bisa dikirim via WA atau dicetak ke printer Bluetooth. Semua data tersimpan di perangkat ini saja, tanpa server dan tanpa internet (internet hanya dipakai sekali saat aktivasi kode).</p>
       <p style="font-size:14px;color:var(--abu)">Suka dengan versi web ini? Unduh aplikasi Android-nya supaya bisa dipakai di HP, tetap offline dan datanya tersimpan di HP sendiri.</p>
       <a id="unduh-android" href="https://lynk.id/immangarif/4dvo1rqp7r3v" target="_blank" rel="noopener" style="display:block;padding:12px;border-radius:12px;background:var(--hijau);color:#fff;font-size:15px;font-weight:700;text-decoration:none;text-align:center">⬇️ Unduh Aplikasi Android</a>
     </div>

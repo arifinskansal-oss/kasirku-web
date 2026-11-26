@@ -1,4 +1,5 @@
-/* KasirKu v1.8.1 — logika kasir toko lokal (web standar murni).
+/* KasirKu v1.8.2 — logika kasir toko lokal (web standar murni).
+   v1.8.2 (26 Nov 2026): BUNYI BEEP SCAN — saat scan barcode kasir berhasil dan produk ditemukan, aplikasi membunyikan satu beep pendek (~100 ms, 1500 Hz, WebAudio tanpa berkas, jalan offline); barcode yang tidak dikenal TIDAK dibunyikan supaya dari bunyinya ketahuan ada yang tidak beres. Konteks audio disiapkan di bukaScan() (ketuk tombol Scan = gestur pengguna) karena WebView bawaan menuntut gestur sebelum audio boleh berbunyi. Getar yang sudah ada tidak diubah. ANIMASI STOK HABIS — tile produk yang stoknya habis (terbatas dan = 0) berdenyut merah pelan (class habis, 1,2 dtk sekali); ketuk produk habis menampilkan "Stok habis" dan tidak masuk keranjang; stok menipis tetap merah polos tanpa kedip (kedip = habis, merah polos = menipis); produk tanpa batas stok tidak berkedip.
    v1.8.1 (25 Nov 2026): (1) AKTIVASI KODE SAJA — kolom email DIHAPUS dari semua tempat aktivasi (layar kunci, kartu Lisensi); aktivasi hanya butuh kode seperti dulu (perintah ARIFIN 21:15 WITA: v1.8.0 "terlalu ribet"). Email HANYA diminta di dua tempat: "Lupa kode?" (kirim ulang kode) dan "Pindah ke perangkat ini" (bila kode sudah dipakai perangkat lain + email cocok -> ikat ulang; record lama tanpa email menerima email yang dimasukkan). (2) PESAN GALAT JUJUR — fetch yang ditolak hanya disebut "tidak ada internet" bila navigator.onLine === false; bila internet menyala tapi fetch gagal -> "Tidak bisa terhubung ke server"; bila server menjawab dengan status bukan 2xx (mis. rules menolak tulis -> permission denied) -> "Server menolak, coba lagi". Berlaku di aktivasi, pindah perangkat, kirim ulang, dan keluar.
    v1.7.8 (25 Nov 2026): (1) CROP PERSEGI — satu pemotong untuk foto
    produk + gambar QRIS: sesudah pilih gambar, tampil bingkai persegi
@@ -1056,7 +1057,7 @@
      TANPA ?auth=, TANPA secret (secret TIDAK PERNAH masuk aplikasi).
      Mengembalikan Promise berisi isi node {versi, vc, tautan} atau
      null bila node tidak ada / fetch gagal / tidak ada internet. */
-  var VERSI_KODE = 24;   /* HARUS sama dengan versionCode AndroidManifest */
+  var VERSI_KODE = 25;   /* HARUS sama dengan versionCode AndroidManifest */
   var LINK_UPDATE = "https://lynk.id/immangarif/4dvo1rqp7r3v"; /* listing gratis */
   var KEY_UPDATE_TERAKHIR = "kasirku_update_terakhir_v1"; /* tanggal YYYY-MM-DD terakhir dialog tampil */
   function bacaInfoVersi(dbUrl, fetchFn) {
@@ -1898,6 +1899,41 @@
       L.getarAman(function (ms) { navigator.vibrate(ms); });
   }
 
+  /* ---------- bunyi beep scan berhasil (v1.8.2) ----------
+     Satu bunyi pendek lewat WebAudio (tanpa berkas, jalan offline).
+     WebView bawaan menuntut gestur pengguna sebelum audio boleh
+     berbunyi, jadi konteks audio disiapkan di bukaScan() (ketuk
+     tombol Scan = gestur) dan dipakai lagi saat scan berhasil.
+     Dipanggil HANYA saat scan kasir berhasil dan produk ditemukan,
+     supaya dari bunyinya ketahuan scan sudah beres. Barcode yang
+     tidak dikenal TIDAK dibunyikan. Semua dibungkus try/catch:
+     bunyi itu opsional, jangan pernah gagalkan scan. */
+  var bunyiCtx = null;
+  function siapkanBunyi() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!bunyiCtx) bunyiCtx = new AC();
+      if (bunyiCtx.state === "suspended" && bunyiCtx.resume) bunyiCtx.resume();
+    } catch (e) { /* diam — bunyi opsional */ }
+  }
+  function bunyiBeep() {
+    try {
+      siapkanBunyi();
+      if (!bunyiCtx) return;
+      var osc = bunyiCtx.createOscillator();
+      var gain = bunyiCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 1500;
+      gain.gain.setValueAtTime(0.15, bunyiCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, bunyiCtx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(bunyiCtx.destination);
+      osc.start();
+      osc.stop(bunyiCtx.currentTime + 0.12);
+    } catch (e) { /* diam — bunyi opsional, jangan gagalkan scan */ }
+  }
+
   function terapkanHuruf(nama) {
     var skala = L.skalaHuruf(nama);
     document.body.style.zoom = skala === 1 ? "" : String(skala);
@@ -2039,13 +2075,16 @@
       k.items.forEach(function (p) {
         tampil++;
         var habis = L.stokTerbatas(p) && angka(p.stok) <= 0;
-        /* v1.5 — stok menipis: tile merah + teks "Stok X • Menipis". */
+        /* v1.5 — stok menipis: tile merah + teks "Stok X • Menipis".
+           v1.8.2 — stok habis: tile berdenyut merah pelan (class habis);
+           tombol TIDAK disabled supaya ketukan menampilkan peringatan
+           "Stok habis" lewat ketukProduk(), bukan diam saja. */
         var menipis = !habis && L.stokMenipis(p);
-        html += '<button class="tile' + (habis ? " habis" : "") + (menipis ? " menipis" : "") + '" data-id="' + p.id + '"' + (habis ? " disabled" : "") + ">"
+        html += '<button class="tile' + (habis ? " habis" : "") + (menipis ? " menipis" : "") + '" data-id="' + p.id + '">'
           + (p.foto ? '<img class="tile-foto" src="' + esc(p.foto) + '" alt="">' : "")
           + '<span class="tile-nama">' + esc(p.nama) + "</span>"
           + '<span class="tile-harga">' + L.rupiah(p.harga) + " / " + esc(L.satuanLabel(p)) + "</span>"
-          + '<span class="tile-stok">' + (L.stokTerbatas(p) ? "Stok " + L.formatQty(p.stok) + (menipis ? " • Menipis" : "") : "Tanpa barcode") + "</span></button>";
+          + '<span class="tile-stok">' + (L.stokTerbatas(p) ? "Stok " + L.formatQty(p.stok) + (habis ? " • Habis" : menipis ? " • Menipis" : "") : "Tanpa barcode") + "</span></button>";
       });
       html += "</div>";
     });
@@ -2071,6 +2110,8 @@
   function ketukProduk(id, dari) {
     var p = produkById(id);
     if (!p) return;
+    /* v1.8.2 — stok habis: beri tahu, jangan masukkan ke keranjang. */
+    if (L.stokTerbatas(p) && angka(p.stok) <= 0) { toast("Stok habis"); return; }
     if (L.butuhJumlah(p)) {
       pindahTab("kasir");
       bukaPanelJumlah(p);
@@ -2350,14 +2391,16 @@
   function renderProduk() {
     var html = "";
     products.forEach(function (p) {
-      var menipis = L.stokTerbatas(p) && angka(p.stok) <= angka(p.minStok, MIN_STOK_DEFAULT);
+      /* v1.8.2 — habis dan menipis dipisah: kedip = habis, merah polos = menipis. */
+      var habis = L.stokTerbatas(p) && angka(p.stok) <= 0;
+      var menipis = !habis && L.stokTerbatas(p) && angka(p.stok) <= angka(p.minStok, MIN_STOK_DEFAULT);
       html += '<div class="produk-kartu">' + (p.foto ? '<img class="pk-foto" src="' + esc(p.foto) + '" alt="">' : "")
         + '<div class="pk-info"><b>' + esc(p.nama) + "</b>"
         + "<span>" + esc(p.kategori || "Umum") + " • " + esc(L.satuanLabel(p))
         + (L.barcodes(p).length ? " • " + esc(L.barcodes(p).join(", ")) : " • tanpa barcode") + "</span>"
         + "<span>Jual " + L.rupiah(p.harga) + " / " + esc(L.satuanLabel(p))
         + (angka(p.hpp) > 0 ? " • Modal " + L.rupiah(p.hpp) : "") + "</span>"
-        + '<span class="pk-stok' + (menipis ? " menipis" : "") + '">' + stokTeks(p)
+        + '<span class="pk-stok' + (habis ? " habis" : "") + (menipis ? " menipis" : "") + '">' + stokTeks(p)
         + (menipis ? " • Stok menipis!" : "") + "</span></div>"
         + '<div class="pk-aksi"><button data-aksi="cetak" data-id="' + p.id + '">🖨️ Cetak Barcode</button>'
         + '<button data-aksi="edit" data-id="' + p.id + '">Ubah</button>'
@@ -2446,6 +2489,7 @@
   }
 
   function bukaScan(mode) {
+    siapkanBunyi();   /* v1.8.2 — siapkan konteks audio di dalam gestur ketuk tombol */
     if (typeof Html5Qrcode === "undefined") {
       toast("Pustaka scan tidak tersedia di perangkat ini");
       return;
@@ -2561,6 +2605,7 @@
     tutupScan();
     var p = L.cariByBarcode(products, kode);
     if (p) {
+      bunyiBeep();   /* v1.8.2 — produk ditemukan: bunyi tanda scan beres */
       if (L.isBulk(p)) {
         /* barang curah: minta jumlah dulu (tombol cepat 1/2, 1, 2 Liter / 100, 250, 500 mili) */
         bukaPanelJumlah(p);
@@ -2574,6 +2619,18 @@
     /* barcode belum terdaftar -> tawarkan: sambungkan ke produk lama atau buat baru */
     bukaPanelSambung(kode);
   }
+
+  /* v1.8.2 — kait uji: paparkan jalur scan/ketuk lewat KasirLogic supaya
+     suite DOM + Chrome bisa menguji beep dan stok habis tanpa kamera.
+     Tanpa perubahan perilaku aplikasi. */
+  L.ujiScan = {
+    aturModeScan: function (m) { scanMode = m; },
+    onScanSukses: onScanSukses,
+    bukaScan: bukaScan,
+    ketukProduk: ketukProduk,
+    bunyiBeep: bunyiBeep,
+    siapkanBunyi: siapkanBunyi
+  };
 
   /* ---------- sambung barcode baru ke produk ---------- */
   var barcodeBaru = null;
